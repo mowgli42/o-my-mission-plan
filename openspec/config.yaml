@@ -1,0 +1,5 @@
+schema: spec-driven
+context: |
+  Mission planning for o-my OMS ecosystem.
+  Stack: Python FastAPI (route propagation + fuel) + simple allocator/route generator.
+  Follow openspec/WORKFLOW.md: spec → beads → implement → verify.
