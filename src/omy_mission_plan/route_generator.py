@@ -156,13 +156,16 @@ def generate_route(
     navaids: dict[str, Navaid],
     airbases: Optional[dict[str, Airbase]] = None,
     mission_waypoints: Optional[dict[str, PublishedFix]] = None,
+    vias: Optional[list[str]] = None,
+    avoid_fix_ids: Optional[list[str]] = None,
 ) -> Route:
     """
-    Build home → published fixes → home for assigned tasks.
+    Build home → [forced vias] → published fixes for tasks → home.
 
     Only airbases, commercial navaids, and fixed mission waypoints appear.
-    Tasks that cannot be covered by any published fix are listed on the
-    route as ``unsatisfied_task_ids``.
+    ``vias`` are required published fix ids inserted in order after home
+    (unexpected-axis / corridor support). ``avoid_fix_ids`` are excluded
+    from task-satisfaction selection (not from explicit vias).
     """
     bases = airbases if airbases is not None else {home.id: home}
     published = build_published_set(bases, navaids, mission_waypoints)
@@ -172,6 +175,7 @@ def generate_route(
         location=home.location,
         kind="airbase",
     )
+    avoided = set(avoid_fix_ids or [])
 
     waypoints: list[Waypoint] = [
         Waypoint(
@@ -186,6 +190,18 @@ def generate_route(
     unsatisfied: list[str] = []
     remaining = list(tasks)
 
+    # Forced published vias (axis / corridor) — must exist in the nav database.
+    for via_id in vias or []:
+        if via_id not in published:
+            raise KeyError(f"Unknown published via fix: {via_id}")
+        fix = published[via_id]
+        _append_fix(waypoints, fix)
+        current = fix.location
+
+    selectable = {
+        fid: fix for fid, fix in published.items() if fid not in avoided
+    }
+
     while remaining:
         task = _nearest_unvisited(current, remaining)
         remaining.remove(task)
@@ -196,7 +212,7 @@ def generate_route(
                 covering.associated_task_id = task.id
             continue
 
-        chosen = _find_satisfying_fix(task, published, current)
+        chosen = _find_satisfying_fix(task, selectable, current)
         if chosen is None:
             unsatisfied.append(task.id)
             continue
@@ -225,6 +241,35 @@ def generate_route(
         unsatisfied_task_ids=unsatisfied,
         total_distance_nmi=round(total, 2),
     )
+
+
+def associate_tasks(route: Route, tasks: list[Task]) -> Route:
+    """
+    Bind assigned tasks to existing published waypoints by proximity.
+
+    Does not change geometry — only ``associated_task_id`` and
+    ``unsatisfied_task_ids``. Used after a supplier returns ordered fixes.
+    """
+    by_id = {t.id: t for t in tasks}
+    assigned = list(route.assigned_task_ids) or [t.id for t in tasks]
+    unsatisfied: list[str] = []
+    # Clear prior associations before rebinding
+    for wp in route.waypoints:
+        wp.associated_task_id = None
+    for tid in assigned:
+        task = by_id.get(tid)
+        if task is None:
+            unsatisfied.append(tid)
+            continue
+        covering = next((wp for wp in route.waypoints if _waypoint_satisfies(wp, task)), None)
+        if covering is None:
+            unsatisfied.append(tid)
+            continue
+        if not covering.associated_task_id:
+            covering.associated_task_id = tid
+    route.assigned_task_ids = assigned
+    route.unsatisfied_task_ids = unsatisfied
+    return route
 
 
 def route_satisfies_proximity(route: Route, tasks: list[Task]) -> bool:
