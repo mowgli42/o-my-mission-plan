@@ -46,3 +46,52 @@ Feature: o-my Mission Planning
     Then a JSON bundle with schema o-my.mission-plan.routes/v1 is produced
     And each GO route lists ordered published waypoints starting and ending at OEPS
     And each route is marked for publish on uci.route when the aircraft launches
+
+  # --- CONOPS: iterative cycle + top-three options ---
+
+  Scenario: Planning cycle produces a saved Mission Option with router inputs
+    When the planner runs a plan cycle with emphasis "efficient"
+    Then a Mission Option is stored with emphasis efficient
+    And the option records the router inputs used (supplier, vias, avoids, axis profile if any)
+    And the option includes per-aircraft routes, fuel state, and GO or NO-GO status
+    And unallocated tasks for that cycle are listed on the option
+
+  Scenario: Top-three option slots for holistic comparison
+    Given Mission Options created with emphases efficient, synchronized, and unexpected_axis
+    When the planner pins them to slots A, B, and C respectively
+    Then slot A holds the efficient option
+    And slot B holds the synchronized option
+    And slot C holds the unexpected_axis option
+    And each slot remains available for side-by-side comparison
+
+  Scenario: Efficient option favors shorter published-waypoint routing
+    When the planner creates an option with emphasis efficient
+    Then router inputs do not require an unexpected-axis via list
+    And the resulting routes use published waypoints only
+    And total distance and fuel margins are available for comparison
+
+  Scenario: Synchronized option carries timing intent for effects
+    Given strike tasks marked as a sync group with a nominal time-on-target
+    And an ISR task marked for BDA after a strike in that group
+    When the planner creates an option with emphasis synchronized
+    Then the option stores the sync group and BDA lag intent in router inputs
+    And comparison metrics include timing alignment indicators against those windows
+
+  Scenario: Unexpected-axis option forces non-obvious approach vias
+    Given a published via list that encodes approach from the west via a northern corridor
+    When the planner creates an option with emphasis unexpected_axis and that via list
+    Then the generated routes include those published vias in order
+    And the option is distinguishable from a direct efficient path in comparison
+
+  Scenario: Iterative refine by re-running saved inputs
+    Given a saved Mission Option with known router inputs
+    When the planner duplicates the option and patches one via or avoid constraint
+    And re-runs allocate, route, and fuel propagation
+    Then a new Mission Option is stored linked to the parent
+    And both options can be compared on distance, GO counts, and unallocated tasks
+
+  Scenario: Comparison supports progress tracking across the cycle
+    Given at least two Mission Options in the working set
+    When the planner requests a comparison
+    Then the result includes per-option GO count, NO-GO count, unallocated count, total distance, and emphasis label
+    And the planner can record which option is preferred for the next experiment or export
