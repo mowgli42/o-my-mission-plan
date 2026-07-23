@@ -1,0 +1,1 @@
+{"id":"int-08a8c4c19af80288840b917b242de079","kind":"field_change","created_at":"2026-07-23T00:58:30.489931807Z","actor":"Cursor Agent","issue_id":"omp-hyt","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Allocator, route generator, fuel propagator, FastAPI plan/insert APIs, and unit/API tests implemented (12 passed)."}}
