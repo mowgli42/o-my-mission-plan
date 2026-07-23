@@ -12,8 +12,6 @@ Lightweight planning area for the prototype. Real commercial navaids and realist
 | KORL | Orlando Executive / nearby | 28.55, -81.33 | Fighter / bomber staging |
 | KSRQ | Sarasota-Bradenton | 27.40, -82.55 | Secondary |
 
-(Exact coordinates can be refined; these are sufficient for distance calculations.)
-
 ## Commercial Navaids used in routes
 
 | ID | Name | Type | Approx location |
@@ -28,16 +26,32 @@ Lightweight planning area for the prototype. Real commercial navaids and realist
 | PBI | Palm Beach | VORTAC | Southeast FL |
 | CRG | Craig (Jacksonville) | VORTAC | Northeast FL |
 
-## Route construction rules (prototype)
+## Aircraft inventory (prototype)
 
-- ISR / collection tasks → legs of approximately **80 nmi** between successive navaids / task points.
-- Strike tasks → legs of approximately **20 nmi**.
+- 2 × ISR
+- 3 × FIGHTER
+- 2 × BOMBER
+
+Each aircraft has:
+- home airbase
+- initial fuel quantity
+- constant burn rate (fuel units per nmi)
+- fixed reserve requirement
+
+## Task pool (first planning cycle)
+
+Approximately:
+- 4–5 ISR / collection tasks
+- 2–3 strike tasks
+
+## Route construction rules
+
+- The generated route must bring the aircraft **within 80 nmi** of every assigned ISR task and **within 20 nmi** of every assigned strike task.
+- Legs may be of any length required to satisfy connectivity and the proximity constraints.
+- Commercial navaids are used as intermediate waypoints where helpful.
 - Every route starts and ends at the aircraft’s assigned home airbase.
-- Tasks in the same geographic region are grouped and assigned to one aircraft when possible.
 
-## Sample task pool (illustrative)
+## Feedback that must be visible
 
-- ISR-01 … ISR-04 : collection tasks spread across Central / East FL
-- STK-01 … STK-03 : strike tasks clustered near a target area
-
-Exact coordinates and task definitions will live in fixtures once the allocator is implemented.
+- List of tasks that remain unallocated after the allocation step.
+- GO / NO-GO for each route based on whether end-of-route fuel meets the fixed reserve.
