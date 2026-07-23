@@ -2,21 +2,14 @@
 
 Issue DB: `.beads/` · prefix `omp` · run `bd ready` / `bd list`.
 
-## Epic (to be created)
+## Epic
 
-**`omp-…`** — MVP: Mission planning prototype (allocator + route generator + fuel propagator)
+**`omp-7ak`** — MVP: Mission planning prototype (allocator + route generator + fuel propagator + dark UI)
 
-### Planned phases
-
-| Phase | Focus |
-|-------|-------|
-| 1 | Demo world (Florida navaids + airbases + sample tasks/aircraft) |
-| 2 | Mock ATO → unassigned task pool |
-| 3 | Simple regional task allocator |
-| 4 | Initial route generator (navaid legs, 80 nmi ISR / 20 nmi strike) |
-| 5 | FastAPI Route Propagation Service (fuel + burn rate per leg) |
-| 6 | Dynamic task insertion + re-propagation |
-| 7 | Docs, tests, Swagger examples |
+| Issue | Focus | Status |
+|-------|-------|--------|
+| `omp-hyt` | Allocator + route generator + propagator core | Closed |
+| `omp-tp4` | Dark theme IxDF UI + screenshots + README | In progress → closing with this drop |
 
 ## Workflow
 
@@ -24,4 +17,5 @@ Issue DB: `.beads/` · prefix `omp` · run `bd ready` / `bd list`.
 bd ready
 bd update <id> --claim
 bd close <id>
+bd dolt push
 ```

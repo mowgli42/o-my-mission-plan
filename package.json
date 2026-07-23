@@ -1,0 +1,11 @@
+{
+  "name": "omy-mission-plan-tools",
+  "private": true,
+  "description": "Dev tooling for o-my-mission-plan (screenshot capture)",
+  "scripts": {
+    "screenshots": "node scripts/capture_screenshots.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}
