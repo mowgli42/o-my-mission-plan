@@ -11,10 +11,13 @@
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark">o-my <span>Mission Plan</span></div>
-          <div class="brand-sub">PSAB launch · Kuwait / Iraq · aligned with debrief + battlespace</div>
+          <div class="brand-sub">PSAB launch · CONOPS options · suppliers · debrief + battlespace</div>
         </div>
         <nav class="view-tabs" role="tablist" aria-label="Primary views">
           <button type="button" class="tab active" data-view="plan" role="tab" aria-selected="true">Plan</button>
+          <button type="button" class="tab" data-view="options" role="tab" aria-selected="false" id="tab-options">
+            Options
+          </button>
           <button type="button" class="tab" data-view="routes" role="tab" aria-selected="false" id="tab-routes" disabled>
             Routes
           </button>
@@ -85,6 +88,59 @@
               <button class="btn btn-primary" type="submit" id="btn-insert-submit" disabled>Insert &amp; re-assess</button>
             </div>
           </form>
+        </section>
+      </main>
+
+      <!-- OPTIONS VIEW (CONOPS top-three) -->
+      <main id="view-options" class="options-view view" data-view-panel="options" hidden>
+        <section class="options-hero" aria-labelledby="options-title">
+          <div>
+            <p class="eyebrow">CONOPS · human-in-the-loop</p>
+            <h2 id="options-title">Top-three Mission Options</h2>
+            <p class="lede">
+              Frame Efficient, Synchronized, and Unexpected-axis plans — compare GO / distance / timing —
+              then prefer one for o-my-sim export. Suppliers stay behind the adapter; fuel stays in the propagator.
+            </p>
+          </div>
+          <div class="options-actions">
+            <button type="button" class="btn btn-primary" id="btn-top-three">Build A / B / C</button>
+            <button type="button" class="btn" id="btn-refresh-options">Refresh compare</button>
+            <label class="supplier-pick">
+              Supplier
+              <select id="options-supplier" title="ROUTE_SUPPLIER for next option create">
+                <option value="fallback">fallback</option>
+                <option value="openroutefinder">openroutefinder</option>
+                <option value="costgrid">costgrid</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="option-cards" id="option-cards" aria-label="Slots A B C"></section>
+
+        <section class="compare-panel" aria-labelledby="compare-title">
+          <header>
+            <h3 id="compare-title">Side-by-side compare</h3>
+            <p class="hint">Advisory metrics only — no automatic best picker.</p>
+          </header>
+          <div class="table-wrap">
+            <table id="compare-table">
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Emphasis</th>
+                  <th>GO</th>
+                  <th>NO-GO</th>
+                  <th>Unalloc</th>
+                  <th>Distance</th>
+                  <th>Vias / sync</th>
+                  <th>Preferred</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="compare-tbody"></tbody>
+            </table>
+          </div>
         </section>
       </main>
 
@@ -160,10 +216,11 @@
       <details class="help">
         <summary>Workflow · shortcuts · cross-tool alignment</summary>
         <div class="help-grid">
-          <div><strong>Plan tab</strong> Guess-and-see allocation + fuel GO/NO-GO (existing console).</div>
-          <div><strong>Routes tab</strong> Battlespace-manager route table + o-my-debrief timeline / key events.</div>
-          <div><strong>More details</strong> Map + threat bands + task breakout (battlespace layout).</div>
-          <div><strong>Shortcuts</strong> P plan · E export · I insert · R reset · 1 Plan · 2 Routes · ? help</div>
+          <div><strong>Plan tab</strong> Guess-and-see allocation + fuel GO/NO-GO.</div>
+          <div><strong>Options tab</strong> CONOPS top-three — Efficient / Synchronized / Unexpected-axis compare.</div>
+          <div><strong>Routes tab</strong> Battlespace route table + debrief timeline / key events.</div>
+          <div><strong>More details</strong> Map + threat bands + task breakout.</div>
+          <div><strong>Shortcuts</strong> P plan · O options · E export · I insert · R reset · 1/2/3 tabs · ? help</div>
         </div>
       </details>
     </div>

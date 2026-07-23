@@ -14,11 +14,24 @@ aircraft launches.
 
 ```bash
 make demo
-# then either:
+# Preferred CONOPS path:
+# 1) Options tab → Build A / B / C → Prefer one option
+# 2) Export for o-my-sim (uses preferred option by default)
+curl -X POST http://localhost:8000/api/options/top-three?force=true
+curl -X POST http://localhost:8000/api/options/<id>/prefer
+curl -X POST http://localhost:8000/api/routes/export
+# Legacy: plan cycle then export session latest when no preferred option
 curl -X POST http://localhost:8000/api/plan
 curl -X POST http://localhost:8000/api/routes/export
-# or use the UI “Export for o-my-sim” button after a plan cycle
 ```
+
+**Export resolution order**
+
+1. Explicit `option_id` in the request body / query
+2. Else the Mission Option marked **preferred**
+3. Else the latest session plan
+
+The bundle includes `export_source` (`explicit_option` | `preferred_option` | `session_latest`) and `option_id` when an option was used.
 
 Files written (default directory `data/routes/`):
 
