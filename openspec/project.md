@@ -13,25 +13,34 @@ The system supports “guess-and-see” planning cycles:
 
 Richer capabilities (full ATO parsing, advanced allocation algorithms, loadout determination, multi-ship deconfliction, threat avoidance, optimization) are intentionally left for external supplier services that will interface via UCI messages.
 
+## Demo world
+
+Gulf War / **PSAB (OEPS)** launch scenario: Coalition aircraft home-based at Prince
+Sultan AB; ISR and strike tasks across Kuwait and Iraq. Published navigation
+database = airbases + commercial navaids + fixed mission waypoints.
+
+See `docs/DEMO-WORLD.md` and `docs/OMY-SIM-ROUTES.md` (final route export for o-my-sim).
+
 ## Stack (planned)
 
 | Layer | Choice |
 |-------|--------|
 | Core service | FastAPI + Pydantic |
 | Task allocation & route generation | Pure Python (simple rules) |
-| Persistence (prototype) | In-memory + optional JSON fixtures |
+| Persistence (prototype) | In-memory + JSON route export for o-my-sim |
 | Tracking | Beads (`bd`) + OpenSpec + Gherkin |
-| Future UI | Svelte 5 (map + fuel state) — not required for first prototype |
+| UI | Dark static console (IxDF heuristics); future Svelte optional |
 
 ## Related repos
 
 - `o-my` — C2 / UCI bus processors
 - `o-my-debrief` — Platform debrief (same OpenSpec + Beads pattern)
-- `o-my-sim` — publishers / scenario clock
+- `o-my-sim` — publishers / scenario clock (imports `o-my.mission-plan.routes/v1`)
 - `fuzzy-reconciler` — reference OpenSpec + FastAPI layout
 
 ## Conventions
 
-- Topics / messages align with UCI style used in `o-my` (`uci.platform.status`, `uci.task`, `uci.route`, …).
-- Demo world: Central / East Florida (real commercial navaids + realistic airbases).
+- Topics / messages align with UCI style (`uci.platform.status`, `uci.task`, `uci.route`, …).
+- Demo world: PSAB → Kuwait / Iraq (published navaids + fixed mission waypoints).
 - API base path: `/api/*`, Swagger at `/docs`.
+- Route export schema: `o-my.mission-plan.routes/v1`.

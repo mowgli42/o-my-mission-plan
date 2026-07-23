@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 from . import demo_world
 from .allocator import allocate, aircraft_by_id
+from .export_routes import build_export_bundle, write_export_bundle
 from .models import (
     AllocationResult,
     FuelState,
@@ -18,7 +20,7 @@ from .models import (
     TaskType,
 )
 from .propagator import propagate
-from .route_generator import generate_route
+from .route_generator import PublishedFix, generate_route
 
 
 class PlannedAircraft(BaseModel):
@@ -41,8 +43,12 @@ class PlanCycleResult(BaseModel):
 
 
 class WorldSnapshot(BaseModel):
+    scenario_id: str
+    scenario_name: str
+    launch_base_id: str
     airbases: list
     navaids: list
+    mission_waypoints: list
     aircraft: list
     tasks: list
 
@@ -56,26 +62,55 @@ class PlanningSession:
     def reset(self) -> None:
         self.airbases = deepcopy(demo_world.AIRBASES)
         self.navaids = deepcopy(demo_world.NAVAIDS)
+        self.mission_waypoints: dict[str, PublishedFix] = dict(
+            demo_world.MISSION_WAYPOINTS
+        )
         self.aircraft = deepcopy(demo_world.AIRCRAFT)
         self.tasks = deepcopy(demo_world.TASKS)
         self.task_index: dict[str, Task] = {t.id: t for t in self.tasks}
         self.latest: Optional[PlanCycleResult] = None
-        # aircraft_id -> assigned task ids (live)
         self.assignments: dict[str, list[str]] = {a.id: [] for a in self.aircraft}
         self.routes: dict[str, Route] = {}
         self.fuel: dict[str, FuelState] = {}
+        self.last_export_paths: dict[str, str] = {}
 
     def snapshot(self) -> WorldSnapshot:
         return WorldSnapshot(
+            scenario_id=demo_world.SCENARIO_ID,
+            scenario_name=demo_world.SCENARIO_NAME,
+            launch_base_id=demo_world.LAUNCH_BASE_ID,
             airbases=list(self.airbases.values()),
             navaids=list(self.navaids.values()),
+            mission_waypoints=[
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "kind": f.kind,
+                    "location": {"lat": f.location.lat, "lon": f.location.lon},
+                }
+                for f in self.mission_waypoints.values()
+            ],
             aircraft=self.aircraft,
             tasks=self.tasks,
         )
 
+    def _generate(self, ac, assigned) -> tuple[Route, FuelState]:
+        home = self.airbases[ac.home_base_id]
+        route = generate_route(
+            ac,
+            assigned,
+            home,
+            self.navaids,
+            airbases=self.airbases,
+            mission_waypoints=self.mission_waypoints,
+        )
+        return propagate(route, ac)
+
     def run_plan_cycle(self) -> PlanCycleResult:
         allocation = allocate(self.tasks, self.aircraft, self.airbases)
-        self.assignments = {aid: list(tids) for aid, tids in allocation.assignments.items()}
+        self.assignments = {
+            aid: list(tids) for aid, tids in allocation.assignments.items()
+        }
 
         plans: list[PlannedAircraft] = []
         self.routes.clear()
@@ -97,11 +132,7 @@ class PlanningSession:
                 )
                 continue
 
-            home = self.airbases[ac.home_base_id]
-            route = generate_route(
-                ac, assigned, home, self.navaids, airbases=self.airbases
-            )
-            route, fuel = propagate(route, ac)
+            route, fuel = self._generate(ac, assigned)
             self.routes[ac.id] = route
             self.fuel[ac.id] = fuel
             plans.append(
@@ -131,16 +162,14 @@ class PlanningSession:
                 "nogo": nogo,
                 "unallocated": len(unallocated),
                 "idle": sum(1 for p in plans if p.status == "idle"),
+                "scenario_id": demo_world.SCENARIO_ID,
+                "launch_base_id": demo_world.LAUNCH_BASE_ID,
             },
         )
         self.latest = result
         return result
 
-    def insert_task(
-        self,
-        aircraft_id: str,
-        task: Task,
-    ) -> PlannedAircraft:
+    def insert_task(self, aircraft_id: str, task: Task) -> PlannedAircraft:
         """Inject a new task, fully re-generate route + re-propagate fuel."""
         if aircraft_id not in {a.id for a in self.aircraft}:
             raise KeyError(f"Unknown aircraft: {aircraft_id}")
@@ -156,11 +185,7 @@ class PlanningSession:
 
         ac = aircraft_by_id(self.aircraft, aircraft_id)
         assigned = [self.task_index[tid] for tid in tids]
-        home = self.airbases[ac.home_base_id]
-        route = generate_route(
-            ac, assigned, home, self.navaids, airbases=self.airbases
-        )
-        route, fuel = propagate(route, ac)
+        route, fuel = self._generate(ac, assigned)
         self.routes[aircraft_id] = route
         self.fuel[aircraft_id] = fuel
 
@@ -176,35 +201,54 @@ class PlanningSession:
             status="GO" if fuel.feasible else "NO-GO",
         )
 
-        # Refresh latest summary if we have one
         if self.latest:
-            updated_plans = []
-            for p in self.latest.plans:
-                if p.aircraft_id == aircraft_id:
-                    updated_plans.append(planned)
-                else:
-                    updated_plans.append(p)
+            updated_plans = [
+                planned if p.aircraft_id == aircraft_id else p for p in self.latest.plans
+            ]
             self.latest.plans = updated_plans
             self.latest.summary = {
-                "aircraft_planned": sum(1 for p in updated_plans if p.status in ("GO", "NO-GO")),
+                "aircraft_planned": sum(
+                    1 for p in updated_plans if p.status in ("GO", "NO-GO")
+                ),
                 "go": sum(1 for p in updated_plans if p.status == "GO"),
                 "nogo": sum(1 for p in updated_plans if p.status == "NO-GO"),
                 "unallocated": len(self.latest.unallocated_tasks),
                 "idle": sum(1 for p in updated_plans if p.status == "idle"),
+                "scenario_id": demo_world.SCENARIO_ID,
+                "launch_base_id": demo_world.LAUNCH_BASE_ID,
             }
 
         return planned
 
+    def export_routes_for_sim(
+        self,
+        *,
+        include_nogo: bool = False,
+        directory: Path | str = "data/routes",
+        write: bool = True,
+    ) -> dict[str, Any]:
+        """Build (and optionally write) the o-my-sim route import bundle."""
+        if self.latest is None:
+            raise RuntimeError("No plan yet — run a plan cycle first")
+        bundle = build_export_bundle(
+            self.latest, self.aircraft, include_nogo=include_nogo
+        )
+        if write:
+            self.last_export_paths = write_export_bundle(bundle, directory=directory)
+            bundle = {**bundle, "written_paths": dict(self.last_export_paths)}
+        return bundle
+
 
 def make_demo_insert_task(
     task_id: str = "STK-NEW",
-    lat: float = 28.35,
-    lon: float = -80.90,
+    lat: float = 29.60,
+    lon: float = 47.65,
 ) -> Task:
+    """Dynamic strike near Mutla Ridge (Kuwait north) published coverage."""
     return Task(
         id=task_id,
         type=TaskType.STRIKE,
         location=LatLon(lat=lat, lon=lon),
         priority=3,
-        label="Injected strike (dynamic)",
+        label="Injected strike (dynamic) — Kuwait north",
     )

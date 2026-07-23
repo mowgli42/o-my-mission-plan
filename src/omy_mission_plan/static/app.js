@@ -12,8 +12,8 @@ const state = {
 
 const $ = (sel) => document.querySelector(sel);
 
-/* ---- Geographic projection (Florida demo bbox) ---- */
-const BOUNDS = { minLat: 26.4, maxLat: 30.6, minLon: -83.0, maxLon: -79.6 };
+/* ---- Geographic projection (Gulf War / PSAB → Kuwait / Iraq) ---- */
+const BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
 
 function project(lat, lon) {
   const x = ((lon - BOUNDS.minLon) / (BOUNDS.maxLon - BOUNDS.minLon)) * 600 + 20;
@@ -190,13 +190,13 @@ function renderMap() {
   }
 
   const parts = [];
-  // coastline-ish silhouette (decorative, not geospatial)
+  // Decorative Gulf theater outline (not precise geography)
   parts.push(`
-    <path d="M120,40 C180,30 260,50 320,70 C400,100 460,160 500,240 C530,310 540,390 500,450 C450,490 360,500 280,480 C200,460 140,420 110,360 C80,290 70,180 120,40 Z"
+    <path d="M80,460 C140,430 180,380 220,300 C260,220 300,160 360,120 C420,80 480,70 540,90 C560,140 550,220 520,280 C490,340 450,400 400,440 C340,480 200,500 80,460 Z"
       fill="rgba(61,184,160,0.04)" stroke="rgba(61,184,160,0.18)" stroke-width="1.5"/>
   `);
 
-  for (const n of w.navaids) {
+  for (const n of w.navaids || []) {
     const [x, y] = project(n.location.lat, n.location.lon);
     parts.push(`
       <g>
@@ -205,16 +205,26 @@ function renderMap() {
       </g>`);
   }
 
-  for (const b of w.airbases) {
-    const [x, y] = project(b.location.lat, b.location.lon);
+  for (const m of w.mission_waypoints || []) {
+    const [x, y] = project(m.location.lat, m.location.lon);
     parts.push(`
       <g>
-        <rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="#3db8a0" transform="rotate(45 ${x} ${y})"/>
-        <text x="${x + 8}" y="${y - 6}" fill="#e6edf5" font-size="10" font-family="IBM Plex Mono, monospace">${b.id}</text>
+        <polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/>
+        <text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text>
       </g>`);
   }
 
-  for (const t of w.tasks) {
+  for (const b of w.airbases || []) {
+    const [x, y] = project(b.location.lat, b.location.lon);
+    const launch = b.id === (w.launch_base_id || "OEPS");
+    parts.push(`
+      <g>
+        <rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${launch ? "#3db8a0" : "#2a7f6e"}" transform="rotate(45 ${x} ${y})"/>
+        <text x="${x + 8}" y="${y - 6}" fill="#e6edf5" font-size="10" font-family="IBM Plex Mono, monospace">${b.id}${launch ? " ★" : ""}</text>
+      </g>`);
+  }
+
+  for (const t of w.tasks || []) {
     const [x, y] = project(t.location.lat, t.location.lon);
     const color = t.type === "ISR" ? "#5aa9e6" : "#e07a3a";
     parts.push(`
@@ -254,10 +264,15 @@ function renderMap() {
 function setPlanReady(ready) {
   $("#btn-insert").disabled = !ready;
   $("#btn-insert-submit").disabled = !ready;
+  $("#btn-export").disabled = !ready;
 }
 
 async function loadWorld() {
   state.world = await api("/api/world");
+  if (state.world?.scenario_id) {
+    const badge = $("#scenario-badge");
+    if (badge) badge.textContent = state.world.scenario_id;
+  }
   if (!state.selectedAircraftId && state.world.aircraft.length) {
     state.selectedAircraftId = state.world.aircraft[0].id;
   }
@@ -265,6 +280,20 @@ async function loadWorld() {
   renderFleet();
   renderStats();
   renderMap();
+}
+
+async function exportRoutes() {
+  try {
+    const bundle = await api("/api/routes/export", {
+      method: "POST",
+      body: JSON.stringify({ include_nogo: false, write: true }),
+    });
+    const n = bundle.summary?.route_count ?? bundle.routes?.length ?? 0;
+    const path = bundle.written_paths?.latest || "data/routes/";
+    toast(`Exported ${n} GO route(s) for o-my-sim → ${path}`);
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  }
 }
 
 async function runPlan() {
@@ -346,6 +375,7 @@ async function insertTask(fromForm = true) {
 
 function wire() {
   $("#btn-plan").addEventListener("click", runPlan);
+  $("#btn-export").addEventListener("click", exportRoutes);
   $("#btn-reset").addEventListener("click", resetWorld);
   $("#btn-insert").addEventListener("click", () => insertTask(false));
   $("#insert-form").addEventListener("submit", (e) => {
@@ -361,6 +391,9 @@ function wire() {
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input, select, textarea")) return;
     if (e.key === "p" || e.key === "P") runPlan();
+    if (e.key === "e" || e.key === "E") {
+      if (!$("#btn-export").disabled) exportRoutes();
+    }
     if (e.key === "r" || e.key === "R") resetWorld();
     if ((e.key === "i" || e.key === "I") && !$("#btn-insert").disabled) insertTask(false);
     if (e.key === "?") {

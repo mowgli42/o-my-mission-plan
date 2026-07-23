@@ -21,9 +21,11 @@ frontend/dist/
 .vite/
 *.local
 
-# Data (generated)
+# Data (generated exports)
 data/**
 !data/.gitkeep
+!data/routes/
+!data/routes/.gitkeep
 
 # OS / IDE
 .DS_Store

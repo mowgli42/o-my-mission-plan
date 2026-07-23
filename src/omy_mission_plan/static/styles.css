@@ -375,6 +375,7 @@ a {
 
 .legend .airbase { background: var(--accent); }
 .legend .navaid { background: var(--faint); }
+.legend .mission { background: #c9a227; }
 .legend .isr { background: var(--isr); }
 .legend .strike { background: var(--strike); }
 .legend .route { background: transparent; border-top: 2px solid var(--accent); width: 1rem; height: 0; border-radius: 0; vertical-align: 3px; }

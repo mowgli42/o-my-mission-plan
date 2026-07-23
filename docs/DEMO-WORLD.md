@@ -1,60 +1,69 @@
-# Demo World — Central / East Florida
+# Demo World — Gulf War / PSAB launch
 
-Lightweight planning area for the prototype. Real commercial navaids and realistic airbase locations.
+Coalition aircraft launch from **Prince Sultan Air Base (PSAB / OEPS)** at Al Kharj,
+Saudi Arabia. Collection and strike tasks span **Kuwait and Iraq**.
 
-## Airbases (home plates)
+Scenario id: `gulf-war-psab-001`
 
-| ID | Name | Lat / Lon (approx) | Typical roles |
-|----|------|--------------------|---------------|
-| KXMR | Cape Canaveral / Patrick area | 28.47, -80.57 | ISR, fighter |
-| KCOF | Patrick SFB | 28.23, -80.61 | ISR |
-| KMLB | Melbourne Orlando Intl | 28.10, -80.65 | Mixed |
-| KORL | Orlando Executive / nearby | 28.55, -81.33 | Fighter / bomber staging |
-| KSRQ | Sarasota-Bradenton | 27.40, -82.55 | Secondary |
+## Launch base
 
-## Commercial Navaids used in routes
+| ID | Name | Lat / Lon (approx) | Role |
+|----|------|--------------------|------|
+| OEPS | Prince Sultan AB (PSAB) | 24.06, 47.58 | **Home plate for all demo aircraft** |
+
+## Other published airbases (nav database)
+
+| ID | Name | Lat / Lon (approx) |
+|----|------|--------------------|
+| OEDR | King Abdulaziz AB / Dhahran | 26.27, 50.15 |
+| OKBK | Kuwait International | 29.23, 47.97 |
+| ORBI | Baghdad International (published fix) | 33.26, 44.23 |
+
+## Commercial navaids
 
 | ID | Name | Type | Approx location |
 |----|------|------|-----------------|
-| MLB | Melbourne | VOR/DME | East Central FL |
-| ORL | Orlando | VORTAC | Central FL |
-| LAL | Lakeland | VORTAC | Central FL |
-| VRB | Vero Beach | VORTAC | East Central FL |
-| OMN | Ormond Beach | VORTAC | Northeast FL |
-| SRQ | Sarasota | VORTAC | Southwest FL |
-| PIE | St Petersburg | VORTAC | Tampa Bay |
-| PBI | Palm Beach | VORTAC | Southeast FL |
-| CRG | Craig (Jacksonville) | VORTAC | Northeast FL |
+| PSA | Prince Sultan | VORTAC | PSAB |
+| HFR | Hofuf / Al Ahsa | VORTAC | Eastern SA |
+| DHA | Dhahran | VORTAC | Eastern SA |
+| BAH | Bahrain | VORTAC | Bahrain |
+| KWI | Kuwait | VOR/DME | Kuwait |
+| RAS | Ras Al Khafji area | VOR | SA–Kuwait border |
 
-## Aircraft inventory (prototype)
+## Fixed mission waypoints (published — not invented at runtime)
 
-- 2 × ISR
-- 3 × FIGHTER
-- 2 × BOMBER
+| ID | Name | Approx location |
+|----|------|-----------------|
+| MW-MUTLA | Mutla Ridge (Kuwait north) | 29.55, 47.70 |
+| MW-KUWAIT-CITY | Kuwait City approaches | 29.35, 47.95 |
+| MW-BASRA | Basra approaches | 30.50, 47.78 |
+| MW-NASIRIYAH | Nasiriyah area | 31.05, 46.26 |
+| MW-TALIL | Talil / southern MSR | 30.94, 46.09 |
+| MW-BAGHDAD-S | Baghdad south | 33.10, 44.40 |
+| MW-WADI-AL-BATIN | Wadi al-Batin corridor | 29.90, 46.50 |
 
-Each aircraft has:
-- home airbase
-- initial fuel quantity
-- constant burn rate (fuel units per nmi)
-- fixed reserve requirement
+## Aircraft inventory (all home = OEPS)
+
+- 2 × ISR (Rivet-1 / Rivet-2)
+- 3 × FIGHTER (Viper-1..3)
+- 2 × BOMBER (Buff-1 / Buff-2)
+
+Fuel loads are sized for Gulf theater round-trips (prototype units).
 
 ## Task pool (first planning cycle)
 
-Approximately:
-- 4–5 ISR / collection tasks
-- 2–3 strike tasks
+ISR / collection across Kuwait City, Basra, Nasiriyah, Baghdad, Wadi al-Batin.  
+Strike at Mutla Ridge, Basra area, Baghdad south.
 
 ## Route construction rules
 
-- The generated route is a sequence of **published waypoints only** (airbases, commercial navaids, optional fixed mission waypoints). See [`ROUTE-GENERATION.md`](ROUTE-GENERATION.md).
-- After selection, validate that at least one published waypoint lies **within 80 nmi** of every assigned ISR task and **within 20 nmi** of every assigned strike task.
-- Do **not** invent intermediate lat/lon points (`PROX-*`) at planning time.
-- Legs are great-circle between consecutive published waypoints (any length).
-- Every route starts and ends at the aircraft’s assigned home airbase.
-- Assigned tasks that no published fix can cover are reported as unsatisfied.
+- Published waypoints only (airbases + navaids + fixed mission waypoints). See [`ROUTE-GENERATION.md`](ROUTE-GENERATION.md).
+- Proximity success: within **80 nmi** of ISR tasks, **20 nmi** of strike tasks.
+- Every route starts and ends at **OEPS (PSAB)**.
+- Final GO routes are exported for **o-my-sim** — see [`OMY-SIM-ROUTES.md`](OMY-SIM-ROUTES.md).
 
 ## Feedback that must be visible
 
-- List of tasks that remain unallocated after the allocation step.
-- List of assigned tasks that no published waypoint can satisfy (proximity).
-- GO / NO-GO for each route based on whether end-of-route fuel meets the fixed reserve.
+- Unallocated tasks after allocation
+- Assigned tasks with no published fix in range
+- GO / NO-GO fuel feasibility per route

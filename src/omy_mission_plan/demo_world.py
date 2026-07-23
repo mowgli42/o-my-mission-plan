@@ -1,4 +1,10 @@
-"""Central / East Florida demo world for the mission-planning prototype."""
+"""Gulf War demo world — Coalition launch from PSAB (Prince Sultan AB).
+
+Aircraft launch from OEPS / PSAB (Al Kharj, Saudi Arabia). Collection and
+strike tasks sit across Kuwait and Iraq. Published navigation database =
+airbases + commercial navaids + fixed mission waypoints (not invented at
+planning time). See docs/DEMO-WORLD.md and docs/ROUTE-GENERATION.md.
+"""
 
 from __future__ import annotations
 
@@ -11,144 +17,263 @@ from .models import (
     Task,
     TaskType,
 )
+from .route_generator import PublishedFix
+
+SCENARIO_ID = "gulf-war-psab-001"
+SCENARIO_NAME = "Desert Storm — PSAB launch (Kuwait / Iraq)"
+LAUNCH_BASE_ID = "OEPS"
 
 # ---------------------------------------------------------------------------
-# Airbases
+# Airbases (launch + published recovery / theater plates)
 # ---------------------------------------------------------------------------
 
 AIRBASES: dict[str, Airbase] = {
-    "KXMR": Airbase(
-        id="KXMR",
-        name="Cape Canaveral / Patrick area",
-        location=LatLon(lat=28.47, lon=-80.57),
+    "OEPS": Airbase(
+        id="OEPS",
+        name="Prince Sultan AB (PSAB) / Al Kharj",
+        location=LatLon(lat=24.0627, lon=47.5805),
     ),
-    "KCOF": Airbase(
-        id="KCOF",
-        name="Patrick SFB",
-        location=LatLon(lat=28.23, lon=-80.61),
+    "OEDR": Airbase(
+        id="OEDR",
+        name="King Abdulaziz AB / Dhahran",
+        location=LatLon(lat=26.2654, lon=50.1520),
     ),
-    "KMLB": Airbase(
-        id="KMLB",
-        name="Melbourne Orlando Intl",
-        location=LatLon(lat=28.10, lon=-80.65),
+    "OKBK": Airbase(
+        id="OKBK",
+        name="Kuwait International",
+        location=LatLon(lat=29.2266, lon=47.9689),
     ),
-    "KORL": Airbase(
-        id="KORL",
-        name="Orlando Executive area",
-        location=LatLon(lat=28.55, lon=-81.33),
-    ),
-    "KSRQ": Airbase(
-        id="KSRQ",
-        name="Sarasota-Bradenton",
-        location=LatLon(lat=27.40, lon=-82.55),
+    "ORBI": Airbase(
+        id="ORBI",
+        name="Baghdad International (published fix)",
+        location=LatLon(lat=33.2625, lon=44.2344),
     ),
 }
 
 # ---------------------------------------------------------------------------
-# Commercial navaids
+# Commercial / published navaids (approx; demo fidelity)
 # ---------------------------------------------------------------------------
 
 NAVAIDS: dict[str, Navaid] = {
-    "MLB": Navaid(id="MLB", name="Melbourne", location=LatLon(lat=28.10, lon=-80.63), navaid_type="VOR/DME"),
-    "ORL": Navaid(id="ORL", name="Orlando", location=LatLon(lat=28.55, lon=-81.33), navaid_type="VORTAC"),
-    "LAL": Navaid(id="LAL", name="Lakeland", location=LatLon(lat=27.99, lon=-82.01), navaid_type="VORTAC"),
-    "VRB": Navaid(id="VRB", name="Vero Beach", location=LatLon(lat=27.66, lon=-80.42), navaid_type="VORTAC"),
-    "OMN": Navaid(id="OMN", name="Ormond Beach", location=LatLon(lat=29.30, lon=-81.11), navaid_type="VORTAC"),
-    "SRQ": Navaid(id="SRQ", name="Sarasota", location=LatLon(lat=27.40, lon=-82.55), navaid_type="VORTAC"),
-    "PIE": Navaid(id="PIE", name="St Petersburg", location=LatLon(lat=27.91, lon=-82.68), navaid_type="VORTAC"),
-    "PBI": Navaid(id="PBI", name="Palm Beach", location=LatLon(lat=26.68, lon=-80.09), navaid_type="VORTAC"),
-    "CRG": Navaid(id="CRG", name="Craig", location=LatLon(lat=30.34, lon=-81.51), navaid_type="VORTAC"),
+    "PSA": Navaid(
+        id="PSA",
+        name="Prince Sultan",
+        location=LatLon(lat=24.0750, lon=47.5850),
+        navaid_type="VORTAC",
+    ),
+    "HFR": Navaid(
+        id="HFR",
+        name="Hofuf / Al Ahsa",
+        location=LatLon(lat=25.2853, lon=49.4852),
+        navaid_type="VORTAC",
+    ),
+    "DHA": Navaid(
+        id="DHA",
+        name="Dhahran",
+        location=LatLon(lat=26.2650, lon=50.1500),
+        navaid_type="VORTAC",
+    ),
+    "BAH": Navaid(
+        id="BAH",
+        name="Bahrain",
+        location=LatLon(lat=26.2708, lon=50.6336),
+        navaid_type="VORTAC",
+    ),
+    "KWI": Navaid(
+        id="KWI",
+        name="Kuwait",
+        location=LatLon(lat=29.2400, lon=47.9700),
+        navaid_type="VOR/DME",
+    ),
+    "RAS": Navaid(
+        id="RAS",
+        name="Ras Al Khafji area",
+        location=LatLon(lat=28.4200, lon=48.5000),
+        navaid_type="VOR",
+    ),
 }
 
 # ---------------------------------------------------------------------------
-# Aircraft (2 ISR, 3 fighters, 2 bombers)
-# Fuel units are arbitrary but consistent (think “hundreds of pounds”).
+# Fixed mission waypoints (part of the published nav database — not runtime)
+# ---------------------------------------------------------------------------
+
+MISSION_WAYPOINTS: dict[str, PublishedFix] = {
+    "MW-MUTLA": PublishedFix(
+        id="MW-MUTLA",
+        name="Mutla Ridge (Kuwait north)",
+        location=LatLon(lat=29.5500, lon=47.7000),
+        kind="mission",
+    ),
+    "MW-KUWAIT-CITY": PublishedFix(
+        id="MW-KUWAIT-CITY",
+        name="Kuwait City approaches",
+        location=LatLon(lat=29.3500, lon=47.9500),
+        kind="mission",
+    ),
+    "MW-BASRA": PublishedFix(
+        id="MW-BASRA",
+        name="Basra approaches",
+        location=LatLon(lat=30.5000, lon=47.7800),
+        kind="mission",
+    ),
+    "MW-NASIRIYAH": PublishedFix(
+        id="MW-NASIRIYAH",
+        name="Nasiriyah area",
+        location=LatLon(lat=31.0500, lon=46.2600),
+        kind="mission",
+    ),
+    "MW-TALIL": PublishedFix(
+        id="MW-TALIL",
+        name="Talil / southern MSR",
+        location=LatLon(lat=30.9400, lon=46.0900),
+        kind="mission",
+    ),
+    "MW-BAGHDAD-S": PublishedFix(
+        id="MW-BAGHDAD-S",
+        name="Baghdad south",
+        location=LatLon(lat=33.1000, lon=44.4000),
+        kind="mission",
+    ),
+    "MW-WADI-AL-BATIN": PublishedFix(
+        id="MW-WADI-AL-BATIN",
+        name="Wadi al-Batin corridor",
+        location=LatLon(lat=29.9000, lon=46.5000),
+        kind="mission",
+    ),
+}
+
+# ---------------------------------------------------------------------------
+# Aircraft — all launch from PSAB (OEPS)
+# Fuel sized for Gulf theater round-trips (prototype units).
 # ---------------------------------------------------------------------------
 
 AIRCRAFT: list[Aircraft] = [
-    # ISR
     Aircraft(
         id="ISR-1",
         type=AircraftType.ISR,
-        home_base_id="KCOF",
-        initial_fuel=12000.0,
+        home_base_id="OEPS",
+        initial_fuel=24000.0,
         burn_rate_per_nmi=8.0,
-        reserve_fuel=2000.0,
-        label="Hawk-1 (ISR)",
+        reserve_fuel=3000.0,
+        label="Rivet-1 (ISR)",
     ),
     Aircraft(
         id="ISR-2",
         type=AircraftType.ISR,
-        home_base_id="KXMR",
-        initial_fuel=11000.0,
+        home_base_id="OEPS",
+        initial_fuel=22000.0,
         burn_rate_per_nmi=7.5,
-        reserve_fuel=1800.0,
-        label="Hawk-2 (ISR)",
+        reserve_fuel=2800.0,
+        label="Rivet-2 (ISR)",
     ),
-    # Fighters
     Aircraft(
         id="FTR-1",
         type=AircraftType.FIGHTER,
-        home_base_id="KMLB",
-        initial_fuel=9000.0,
+        home_base_id="OEPS",
+        initial_fuel=20000.0,
         burn_rate_per_nmi=12.0,
-        reserve_fuel=1500.0,
+        reserve_fuel=2500.0,
         label="Viper-1",
     ),
     Aircraft(
         id="FTR-2",
         type=AircraftType.FIGHTER,
-        home_base_id="KORL",
-        initial_fuel=9500.0,
+        home_base_id="OEPS",
+        initial_fuel=20000.0,
         burn_rate_per_nmi=12.5,
-        reserve_fuel=1600.0,
+        reserve_fuel=2500.0,
         label="Viper-2",
     ),
     Aircraft(
         id="FTR-3",
         type=AircraftType.FIGHTER,
-        home_base_id="KMLB",
-        initial_fuel=8800.0,
+        home_base_id="OEPS",
+        initial_fuel=19000.0,
         burn_rate_per_nmi=11.8,
-        reserve_fuel=1500.0,
+        reserve_fuel=2400.0,
         label="Viper-3",
     ),
-    # Bombers
     Aircraft(
         id="BMB-1",
         type=AircraftType.BOMBER,
-        home_base_id="KORL",
-        initial_fuel=22000.0,
+        home_base_id="OEPS",
+        initial_fuel=40000.0,
         burn_rate_per_nmi=18.0,
-        reserve_fuel=3500.0,
-        label="Bone-1",
+        reserve_fuel=5000.0,
+        label="Buff-1",
     ),
     Aircraft(
         id="BMB-2",
         type=AircraftType.BOMBER,
-        home_base_id="KSRQ",
-        initial_fuel=20000.0,
+        home_base_id="OEPS",
+        initial_fuel=38000.0,
         burn_rate_per_nmi=17.0,
-        reserve_fuel=3200.0,
-        label="Bone-2",
+        reserve_fuel=4800.0,
+        label="Buff-2",
     ),
 ]
 
 # ---------------------------------------------------------------------------
-# Unassigned task pool (first planning cycle)
+# Unassigned task pool — Kuwait & Iraq
 # ---------------------------------------------------------------------------
 
 TASKS: list[Task] = [
-    # ISR / collection
-    Task(id="ISR-01", type=TaskType.ISR, location=LatLon(lat=28.40, lon=-80.70), priority=2, label="Collect Cape area"),
-    Task(id="ISR-02", type=TaskType.ISR, location=LatLon(lat=28.00, lon=-81.20), priority=1, label="Collect Central FL"),
-    Task(id="ISR-03", type=TaskType.ISR, location=LatLon(lat=27.70, lon=-80.50), priority=2, label="Collect Vero corridor"),
-    Task(id="ISR-04", type=TaskType.ISR, location=LatLon(lat=29.10, lon=-81.00), priority=1, label="Collect North of OMN"),
-    Task(id="ISR-05", type=TaskType.ISR, location=LatLon(lat=27.50, lon=-82.40), priority=1, label="Collect Sarasota approaches"),
-    # Strike
-    Task(id="STK-01", type=TaskType.STRIKE, location=LatLon(lat=28.20, lon=-81.00), priority=3, label="Strike target Alpha"),
-    Task(id="STK-02", type=TaskType.STRIKE, location=LatLon(lat=27.80, lon=-80.60), priority=3, label="Strike target Bravo"),
-    Task(id="STK-03", type=TaskType.STRIKE, location=LatLon(lat=28.60, lon=-81.40), priority=2, label="Strike target Charlie"),
+    Task(
+        id="ISR-01",
+        type=TaskType.ISR,
+        location=LatLon(lat=29.40, lon=47.90),
+        priority=2,
+        label="Collect Kuwait City / coastal corridor",
+    ),
+    Task(
+        id="ISR-02",
+        type=TaskType.ISR,
+        location=LatLon(lat=30.45, lon=47.70),
+        priority=2,
+        label="Collect Basra approaches",
+    ),
+    Task(
+        id="ISR-03",
+        type=TaskType.ISR,
+        location=LatLon(lat=31.00, lon=46.20),
+        priority=1,
+        label="Collect Nasiriyah / southern MSR",
+    ),
+    Task(
+        id="ISR-04",
+        type=TaskType.ISR,
+        location=LatLon(lat=33.20, lon=44.40),
+        priority=2,
+        label="Collect Baghdad area",
+    ),
+    Task(
+        id="ISR-05",
+        type=TaskType.ISR,
+        location=LatLon(lat=29.80, lon=46.60),
+        priority=1,
+        label="Collect Wadi al-Batin corridor",
+    ),
+    Task(
+        id="STK-01",
+        type=TaskType.STRIKE,
+        location=LatLon(lat=29.52, lon=47.68),
+        priority=3,
+        label="Strike Mutla Ridge area",
+    ),
+    Task(
+        id="STK-02",
+        type=TaskType.STRIKE,
+        location=LatLon(lat=30.48, lon=47.75),
+        priority=3,
+        label="Strike Basra area target",
+    ),
+    Task(
+        id="STK-03",
+        type=TaskType.STRIKE,
+        location=LatLon(lat=33.05, lon=44.42),
+        priority=2,
+        label="Strike Baghdad south target",
+    ),
 ]
 
 

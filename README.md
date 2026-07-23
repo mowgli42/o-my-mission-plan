@@ -2,34 +2,37 @@
 
 **Mission planning capability for the Open Arsenal / o-my OMS ecosystem.**
 
-Functional prototype for iterative “guess-and-see” mission planning cycles:
+Functional prototype for iterative “guess-and-see” mission planning cycles in a
+**Gulf War / PSAB launch** scenario:
 
-- Simulate ATO ingestion → pool of unassigned collection (ISR) and strike tasks
-- Simple task allocation: group tasks by region and assign to suitable aircraft (ISR / fighter / bomber) that have a home airbase
-- Initial route generator that sequences **published waypoints** (airbases + commercial navaids)
+- Simulate ATO ingestion → pool of unassigned collection (ISR) and strike tasks across **Kuwait and Iraq**
+- Aircraft all launch from **Prince Sultan AB (PSAB / OEPS)**
+- Simple task allocation: group tasks by region and assign to suitable aircraft (ISR / fighter / bomber)
+- Initial route generator that sequences **published waypoints** (airbases + commercial navaids + fixed mission fixes)
   - proximity success criteria: within **80 nmi** of ISR / collection tasks
   - within **20 nmi** of strike tasks
   - never invents runtime `PROX-*` lat/lon points (see [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md))
-- FastAPI **Route Propagation Service** that tracks fuel remaining and burn rate per leg so the platform can safely complete the route
+- FastAPI **Route Propagation Service** that tracks fuel remaining and burn rate per leg
+- **Export final GO routes** as JSON for **o-my-sim** to import and publish on `uci.route` when aircraft launch (see [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md))
 - Dark-theme planning console guided by **IxDF / Nielsen usability heuristics**
-- Designed so external suppliers can later implement richer services and talk to this core via **UCI messages**
 
 ---
 
 ## Status
 
-**Functional prototype implemented.** OpenSpec + Gherkin describe the capability; Beads tracks remaining polish.
+**Functional prototype implemented** (scenario: `gulf-war-psab-001`).
 
 | Capability | Status |
 |------------|--------|
 | OpenSpec + Gherkin acceptance scenarios | Done |
 | Beads epic + phased issues | Done |
+| Gulf War / PSAB demo world (Kuwait & Iraq tasks) | Done |
 | Mock ATO → unassigned task pool | Done |
 | Simple regional task allocator | Done |
 | Initial route generator (published waypoints + proximity check) | Done |
 | Route Propagation Service (FastAPI + fuel/burn) | Done |
 | Dynamic task insertion + re-propagation | Done |
-| Demo world (Central/East Florida navaids + airbases) | Done |
+| Final route export for o-my-sim (`uci.route` on launch) | Done |
 | Dark-theme IxDF planning UI | Done |
 | Unit / API tests | Done (`make test`) |
 
@@ -44,7 +47,11 @@ make demo
 # API docs: http://localhost:8000/docs
 ```
 
-Keyboard shortcuts in the UI: **P** run plan · **I** insert strike · **R** reset · **?** toggle help.
+1. **Run plan cycle** (or press `P`)
+2. **Export for o-my-sim** (or press `E`) → writes `data/routes/gulf-war-psab-001-routes-latest.json`
+3. Point o-my-sim at that file; it publishes each GO route on launch
+
+Keyboard shortcuts: **P** plan · **E** export · **I** insert strike · **R** reset · **?** help.
 
 ---
 
@@ -55,11 +62,12 @@ Keyboard shortcuts in the UI: **P** run plan · **I** insert strike · **R** res
 | Module | Role |
 |--------|------|
 | `models.py` | Aircraft, Task, Route, FuelState, AllocationResult, … |
-| `demo_world.py` | 2 ISR + 3 fighters + 2 bombers, 5 ISR + 3 strike tasks, Florida airbases/navaids |
+| `demo_world.py` | PSAB launch, Kuwait/Iraq tasks, navaids + mission waypoints |
 | `allocator.py` | Regional grouping + type-capable assignment; always returns unallocated ids |
 | `route_generator.py` | Home → published fixes → home (proximity validated; no PROX-*) |
 | `propagator.py` | Constant burn + fixed reserve → GO / NO-GO |
-| `planning.py` | Full plan cycle + dynamic insert (full re-generate + re-propagate) |
+| `planning.py` | Full plan cycle + dynamic insert |
+| `export_routes.py` | o-my-sim import bundle (`o-my.mission-plan.routes/v1`) |
 | `app.py` | FastAPI service + static UI |
 
 ### API
@@ -67,56 +75,45 @@ Keyboard shortcuts in the UI: **P** run plan · **I** insert strike · **R** res
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Liveness |
-| GET | `/api/world` | Demo fixtures snapshot |
+| GET | `/api/world` | Demo fixtures snapshot (scenario + mission waypoints) |
 | POST | `/api/reset` | Reset in-memory world |
 | POST | `/api/plan` | Allocate → route → fuel propagate |
 | GET | `/api/plan` | Latest plan result |
 | POST | `/api/tasks/insert` | Inject task; full re-assess for one aircraft |
 | POST | `/api/propagate` | Fuel-propagate an arbitrary route |
+| POST | `/api/routes/export` | Write final GO routes for o-my-sim |
+| GET | `/api/routes/export` | Build export bundle without writing |
 | GET | `/` | Dark planning UI |
 | GET | `/docs` | Swagger |
 
+### Docs
+
+- [`docs/DEMO-WORLD.md`](docs/DEMO-WORLD.md) — PSAB / Kuwait / Iraq scenario
+- [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md) — published-waypoint-only design
+- [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — export contract for o-my-sim
+- [`docs/examples/gulf-war-psab-001-routes-example.json`](docs/examples/gulf-war-psab-001-routes-example.json) — sample bundle
+
 ### UI (IxDF principles)
 
-Dark ops console emphasizing:
-
-1. **Visibility of system status** — GO / NO-GO counts, fuel bars, toasts  
-2. **Match the real world** — airbases, navaids, ISR / strike language  
-3. **User control & freedom** — Reset, re-run plan anytime  
-4. **Consistency & standards** — shared badges / status colors  
-5. **Error prevention** — insert disabled until a plan exists; duplicate task ids rejected  
-6. **Recognition over recall** — full task pool + fleet always visible  
-9. **Error recovery** — explicit fuel-reserve NO-GO reasons  
-10. **Help & documentation** — expandable IxDF workflow + shortcuts + `/docs`
+Dark ops console emphasizing status visibility (GO / NO-GO, fuel bars), real-world
+theater language (PSAB, Kuwait, Iraq), export for sim handoff, and recoverable
+NO-GO / unallocated feedback.
 
 ---
 
 ## Screenshots
 
-### 1. Initial dark UI (task pool + Florida demo world)
-
-![Initial dark UI](docs/screenshots/01-initial-dark-ui.png)
-
-### 2. After plan cycle — assignments, routes, GO / unallocated feedback
-
-![Plan cycle](docs/screenshots/02-plan-cycle-go-nogo.png)
-
-### 3. Dynamic strike insert — full re-assess for selected aircraft
-
-![Dynamic insert](docs/screenshots/03-dynamic-insert-reassess.png)
-
-### 4. IxDF help panel (heuristics, shortcuts, proximity rules)
-
-![IxDF help](docs/screenshots/04-ixdf-help-panel.png)
+Screenshots under `docs/screenshots/` were captured from an earlier Florida demo UI;
+re-run `make screenshots` after `make demo` to refresh for the PSAB theater map.
 
 ---
 
 ## Design Principles
 
 1. **Keep the core small.** The Route Propagation Service is the single source of truth for live routes + fuel state.
-2. **Iterative by nature.** Mission planning is a series of “guess what is possible” cycles. The prototype makes those cycles fast and visible.
-3. **UCI-first contracts.** Everything that will eventually be an external supplier service publishes/consumes UCI-aligned messages.
-4. **Demo realism without complexity.** Real commercial navaids and realistic Florida airbases; distances and burn models stay deliberately simple.
+2. **Iterative by nature.** Mission planning is a series of “guess what is possible” cycles.
+3. **UCI-first contracts.** Final routes are exported so o-my-sim can publish `uci.route` on launch.
+4. **Demo realism without complexity.** PSAB launch + published Gulf theater fixes; burn models stay deliberately simple.
 
 ---
 
@@ -126,16 +123,14 @@ Dark ops console emphasizing:
 make test
 ```
 
-Covers allocator feedback, route proximity rules, fuel GO/NO-GO, and API plan/insert flows.
-
 ---
 
 ## Related repos
 
 - [`o-my`](https://github.com/mowgli42/o-my) — C2 / UCI bus processors
-- [`o-my-debrief`](https://github.com/mowgli42/o-my-debrief) — Platform debrief (same OpenSpec + Beads + FastAPI pattern)
-- [`o-my-sim`](https://github.com/mowgli42/o-my-sim) — publishers / scenario clock (when available)
-- [`fuzzy-reconciler`](https://github.com/mowgli42/fuzzy-reconciler) — reference OpenSpec + Svelte/FastAPI layout
+- [`o-my-debrief`](https://github.com/mowgli42/o-my-debrief) — Platform debrief
+- [`o-my-sim`](https://github.com/mowgli42/o-my-sim) — publishers / scenario clock (imports routes from this service)
+- [`fuzzy-reconciler`](https://github.com/mowgli42/fuzzy-reconciler) — reference OpenSpec + FastAPI layout
 
 ## License
 

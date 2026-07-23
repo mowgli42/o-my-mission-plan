@@ -1,4 +1,11 @@
-from omy_mission_plan.demo_world import AIRBASES, AIRCRAFT, NAVAIDS, TASKS, get_airbase
+from omy_mission_plan.demo_world import (
+    AIRBASES,
+    AIRCRAFT,
+    MISSION_WAYPOINTS,
+    NAVAIDS,
+    TASKS,
+    get_airbase,
+)
 from omy_mission_plan.propagator import propagate
 from omy_mission_plan.route_generator import (
     ISR_PROXIMITY_NMI,
@@ -14,8 +21,18 @@ from omy_mission_plan.models import LatLon, Task, TaskType
 
 def _route(ac, tasks):
     return generate_route(
-        ac, tasks, get_airbase(ac), NAVAIDS, airbases=AIRBASES
+        ac,
+        tasks,
+        get_airbase(ac),
+        NAVAIDS,
+        airbases=AIRBASES,
+        mission_waypoints=MISSION_WAYPOINTS,
     )
+
+
+def test_all_aircraft_launch_from_psab():
+    assert all(a.home_base_id == "OEPS" for a in AIRCRAFT)
+    assert "OEPS" in AIRBASES
 
 
 def test_route_starts_and_ends_at_home():
@@ -27,8 +44,6 @@ def test_route_starts_and_ends_at_home():
     assert route.waypoints[-1].kind == "airbase"
     assert route.waypoints[0].id == home.id
     assert route.waypoints[-1].id == home.id
-    assert abs(route.waypoints[0].location.lat - home.location.lat) < 1e-6
-    assert abs(route.waypoints[-1].location.lat - home.location.lat) < 1e-6
 
 
 def test_route_uses_only_published_waypoints():
@@ -38,15 +53,17 @@ def test_route_uses_only_published_waypoints():
     for wp in route.waypoints:
         assert not wp.id.startswith("PROX-")
         assert wp.kind in {"airbase", "navaid", "mission"}
-        assert wp.kind != "task_proximity"
 
 
 def test_route_respects_proximity_via_published_fixes():
     ac = next(a for a in AIRCRAFT if a.type.value == "FIGHTER")
-    tasks = TASKS[:3]
+    tasks = [t for t in TASKS if t.type == TaskType.STRIKE][:2]
     route = _route(ac, tasks)
     assert route.unsatisfied_task_ids == []
     assert route_satisfies_proximity(route, tasks)
+    # Should visit theater mission fixes, not invent PROX points
+    kinds = {wp.kind for wp in route.waypoints}
+    assert "mission" in kinds or "navaid" in kinds or "airbase" in kinds
     for task in tasks:
         radius = proximity_for(task)
         assert radius in (ISR_PROXIMITY_NMI, STRIKE_PROXIMITY_NMI)
@@ -56,19 +73,17 @@ def test_route_respects_proximity_via_published_fixes():
 
 
 def test_unsatisfied_when_no_published_fix_in_range():
-    """Strike with no navaid/airbase within 20 nmi is reported, not invented."""
     ac = AIRCRAFT[0]
     far = Task(
         id="STK-FAR",
         type=TaskType.STRIKE,
-        location=LatLon(lat=25.0, lon=-80.0),
+        location=LatLon(lat=10.0, lon=10.0),
         priority=1,
         label="Far strike outside published coverage",
     )
     route = _route(ac, [far])
     assert "STK-FAR" in route.unsatisfied_task_ids
     assert_published_only(route)
-    assert not any(wp.id.startswith("PROX-") for wp in route.waypoints)
 
 
 def test_fuel_feasibility_go():

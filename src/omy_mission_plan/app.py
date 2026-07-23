@@ -22,8 +22,9 @@ session = PlanningSession()
 app = FastAPI(
     title="o-my Mission Plan",
     description=(
-        "Iterative mission planning: allocate ISR/strike tasks, generate "
-        "navaid routes, and propagate fuel feasibility (GO / NO-GO)."
+        "Iterative mission planning (Gulf War / PSAB launch): allocate ISR/strike "
+        "tasks across Kuwait & Iraq, generate published-waypoint routes, propagate "
+        "fuel feasibility, and export final routes for o-my-sim launch publish."
     ),
     version=__version__,
 )
@@ -33,15 +34,21 @@ class InsertTaskRequest(BaseModel):
     aircraft_id: str = Field(..., examples=["FTR-1"])
     task_id: str = Field(default="STK-NEW", examples=["STK-NEW"])
     type: TaskType = TaskType.STRIKE
-    lat: float = Field(default=28.35, examples=[28.35])
-    lon: float = Field(default=-80.90, examples=[-80.90])
+    lat: float = Field(default=29.60, examples=[29.60])
+    lon: float = Field(default=47.65, examples=[47.65])
     priority: int = 3
-    label: Optional[str] = "Injected strike (dynamic)"
+    label: Optional[str] = "Injected strike (dynamic) — Kuwait north"
 
 
 class PropagateRequest(BaseModel):
     aircraft_id: str
     route: Route
+
+
+class ExportRequest(BaseModel):
+    include_nogo: bool = False
+    write: bool = True
+    directory: str = "data/routes"
 
 
 @app.get("/api/health")
@@ -107,7 +114,6 @@ def insert_task(body: InsertTaskRequest):
 @app.post("/api/demo/insert-strike")
 def demo_insert_strike(aircraft_id: str = "FTR-1"):
     """Convenience: inject a canned strike task and re-assess the aircraft."""
-    # Ensure we have a plan first
     if session.latest is None:
         session.run_plan_cycle()
     task = make_demo_insert_task(task_id=f"STK-DYN-{len(session.tasks) + 1}")
@@ -115,6 +121,35 @@ def demo_insert_strike(aircraft_id: str = "FTR-1"):
         return session.insert_task(aircraft_id, task)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/routes/export")
+def export_routes(body: Optional[ExportRequest] = None):
+    """
+    Export final planned routes for o-my-sim.
+
+    Writes `data/routes/<scenario>-routes-latest.json` (and per-aircraft files)
+    by default. See docs/OMY-SIM-ROUTES.md.
+    """
+    req = body or ExportRequest()
+    if session.latest is None:
+        raise HTTPException(status_code=404, detail="No plan yet — POST /api/plan first")
+    try:
+        return session.export_routes_for_sim(
+            include_nogo=req.include_nogo,
+            directory=req.directory,
+            write=req.write,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/routes/export")
+def get_exported_routes(include_nogo: bool = False):
+    """Return the export bundle without requiring a prior write (does not write)."""
+    if session.latest is None:
+        raise HTTPException(status_code=404, detail="No plan yet — POST /api/plan first")
+    return session.export_routes_for_sim(include_nogo=include_nogo, write=False)
 
 
 # ---------------------------------------------------------------------------

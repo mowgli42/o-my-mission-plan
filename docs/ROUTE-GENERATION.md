@@ -68,4 +68,4 @@ When a new task is injected, the **entire** route for that aircraft is re-genera
 ## References
 
 - Civil IFR route construction summary (pilot/dispatcher workflow, published waypoints, great-circle legs, FMS).
-- Existing demo navaid set: MLB, ORL, LAL, VRB, OMN, SRQ, PIE, PBI, CRG + airbases KXMR, KCOF, KMLB, KORL, KSRQ.
+- Existing demo navaid / mission set: PSA, HFR, DHA, BAH, KWI, RAS + airbases OEPS, OEDR, OKBK, ORBI + fixed mission waypoints (MW-MUTLA, MW-BASRA, …). See `docs/DEMO-WORLD.md`.
