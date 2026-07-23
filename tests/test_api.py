@@ -103,3 +103,22 @@ def test_export_routes_for_omy_sim(tmp_path: Path):
     latest = tmp_path / "gulf-war-psab-001-routes-latest.json"
     assert latest.is_file()
     assert (tmp_path / "aircraft").is_dir()
+
+
+def test_routes_overview():
+    client.post("/api/plan")
+    r = client.get("/api/routes/overview")
+    assert r.status_code == 200
+    data = r.json()
+    assert "metrics" in data
+    m = data["metrics"]
+    assert "assigned_isr" in m and "assigned_strike" in m
+    assert "skipped_tasks" in m
+    assert "weapons_utilized" in m
+    assert "aircraft_count" in m
+    assert data["routes"]
+    route = data["routes"][0]
+    assert "timeline_events" in route
+    assert route["timeline_events"][0]["event_type"] == "LAUNCH"
+    assert "threats" in route
+    assert "weapons_utilized" in route

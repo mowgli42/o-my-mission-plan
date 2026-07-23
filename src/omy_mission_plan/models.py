@@ -53,6 +53,22 @@ class Aircraft(BaseModel):
     burn_rate_per_nmi: float = Field(..., description="Constant fuel units burned per nmi")
     reserve_fuel: float = Field(..., description="Fixed reserve that must remain at end of route")
     label: Optional[str] = None
+    weapons_loadout: int = Field(
+        0,
+        description="Air-to-ground / strike weapons count available at launch (0 for ISR)",
+    )
+
+
+class Threat(BaseModel):
+    """Demo theater threat for battlespace-style route impact display."""
+
+    id: str
+    kind: str  # SAM | AAA | FIGHTER | ...
+    location: LatLon
+    severity: str = "MEDIUM"  # LOW | MEDIUM | HIGH | CRITICAL
+    label: Optional[str] = None
+    lethal_radius_nmi: float = 50.0
+    jam_radius_nmi: float = 160.0
 
 
 class Waypoint(BaseModel):

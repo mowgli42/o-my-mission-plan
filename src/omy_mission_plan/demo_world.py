@@ -16,6 +16,7 @@ from .models import (
     Navaid,
     Task,
     TaskType,
+    Threat,
 )
 from .route_generator import PublishedFix
 
@@ -156,6 +157,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=8.0,
         reserve_fuel=3000.0,
         label="Rivet-1 (ISR)",
+        weapons_loadout=0,
     ),
     Aircraft(
         id="ISR-2",
@@ -165,6 +167,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=7.5,
         reserve_fuel=2800.0,
         label="Rivet-2 (ISR)",
+        weapons_loadout=0,
     ),
     Aircraft(
         id="FTR-1",
@@ -174,6 +177,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=12.0,
         reserve_fuel=2500.0,
         label="Viper-1",
+        weapons_loadout=4,
     ),
     Aircraft(
         id="FTR-2",
@@ -183,6 +187,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=12.5,
         reserve_fuel=2500.0,
         label="Viper-2",
+        weapons_loadout=4,
     ),
     Aircraft(
         id="FTR-3",
@@ -192,6 +197,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=11.8,
         reserve_fuel=2400.0,
         label="Viper-3",
+        weapons_loadout=4,
     ),
     Aircraft(
         id="BMB-1",
@@ -201,6 +207,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=18.0,
         reserve_fuel=5000.0,
         label="Buff-1",
+        weapons_loadout=12,
     ),
     Aircraft(
         id="BMB-2",
@@ -210,6 +217,7 @@ AIRCRAFT: list[Aircraft] = [
         burn_rate_per_nmi=17.0,
         reserve_fuel=4800.0,
         label="Buff-2",
+        weapons_loadout=12,
     ),
 ]
 
@@ -273,6 +281,49 @@ TASKS: list[Task] = [
         location=LatLon(lat=33.05, lon=44.42),
         priority=2,
         label="Strike Baghdad south target",
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Demo threats (battlespace-style route impact — not inventing route geometry)
+# ---------------------------------------------------------------------------
+
+THREATS: list[Threat] = [
+    Threat(
+        id="THREAT-SAM-01",
+        kind="SAM",
+        location=LatLon(lat=29.78, lon=47.55),
+        severity="HIGH",
+        label="Kuwait north SAM battery",
+        lethal_radius_nmi=45.0,
+        jam_radius_nmi=140.0,
+    ),
+    Threat(
+        id="THREAT-AAA-02",
+        kind="AAA",
+        location=LatLon(lat=30.55, lon=47.65),
+        severity="MEDIUM",
+        label="Basra AAA umbrella",
+        lethal_radius_nmi=25.0,
+        jam_radius_nmi=80.0,
+    ),
+    Threat(
+        id="THREAT-SAM-03",
+        kind="SAM",
+        location=LatLon(lat=32.95, lon=44.55),
+        severity="CRITICAL",
+        label="Baghdad south SAM",
+        lethal_radius_nmi=55.0,
+        jam_radius_nmi=160.0,
+    ),
+    Threat(
+        id="THREAT-INT-04",
+        kind="FIGHTER",
+        location=LatLon(lat=28.80, lon=47.20),
+        severity="MEDIUM",
+        label="CAP intercept corridor",
+        lethal_radius_nmi=30.0,
+        jam_radius_nmi=100.0,
     ),
 ]
 

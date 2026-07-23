@@ -11,8 +11,14 @@
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark">o-my <span>Mission Plan</span></div>
-          <div class="brand-sub">PSAB launch · Kuwait / Iraq · fuel-aware routes</div>
+          <div class="brand-sub">PSAB launch · Kuwait / Iraq · aligned with debrief + battlespace</div>
         </div>
+        <nav class="view-tabs" role="tablist" aria-label="Primary views">
+          <button type="button" class="tab active" data-view="plan" role="tab" aria-selected="true">Plan</button>
+          <button type="button" class="tab" data-view="routes" role="tab" aria-selected="false" id="tab-routes" disabled>
+            Routes
+          </button>
+        </nav>
         <div class="actions" role="toolbar" aria-label="Planning actions">
           <button id="btn-plan" class="btn btn-primary" type="button" title="Allocate, route, and check fuel (P)">
             Run plan cycle
@@ -29,17 +35,14 @@
         </div>
       </header>
 
-      <main class="main">
-        <!-- Recognition rather than recall: task pool always visible -->
+      <!-- PLAN VIEW -->
+      <main id="view-plan" class="main view active" data-view-panel="plan">
         <section class="panel" aria-labelledby="pool-title">
           <div class="panel-head">
             <h2 id="pool-title" class="panel-title">Task pool</h2>
             <span id="pool-count" class="badge badge-idle">0</span>
           </div>
-          <p class="hint">
-            Unassigned ISR and strike tasks from the simulated ATO (Kuwait / Iraq).
-            After a plan cycle, leftovers stay flagged.
-          </p>
+          <p class="hint">Unassigned ISR and strike tasks (Kuwait / Iraq). Leftovers stay flagged after a cycle.</p>
           <div id="task-list" class="list" aria-live="polite"></div>
         </section>
 
@@ -49,118 +52,122 @@
             <span id="scenario-badge" class="badge badge-idle">gulf-war-psab-001</span>
           </div>
           <div id="status-strip" class="status-strip" aria-live="polite">
-            <div class="stat">
-              <span class="stat-label">GO</span>
-              <span id="stat-go" class="stat-value go">—</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">NO-GO</span>
-              <span id="stat-nogo" class="stat-value nogo">—</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Unallocated</span>
-              <span id="stat-unalloc" class="stat-value warn">—</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Idle aircraft</span>
-              <span id="stat-idle" class="stat-value">—</span>
-            </div>
+            <div class="stat"><span class="stat-label">GO</span><span id="stat-go" class="stat-value go">—</span></div>
+            <div class="stat"><span class="stat-label">NO-GO</span><span id="stat-nogo" class="stat-value nogo">—</span></div>
+            <div class="stat"><span class="stat-label">Unallocated</span><span id="stat-unalloc" class="stat-value warn">—</span></div>
+            <div class="stat"><span class="stat-label">Idle aircraft</span><span id="stat-idle" class="stat-value">—</span></div>
           </div>
           <div class="map-frame" id="map-frame">
-            <svg id="map" viewBox="0 0 640 520" role="img" aria-label="Gulf War planning map: PSAB launch, Kuwait and Iraq tasks and routes"></svg>
+            <svg id="map" viewBox="0 0 640 520" role="img" aria-label="Gulf War planning map"></svg>
           </div>
           <div class="legend">
             <span><i class="airbase"></i>Airbase</span>
             <span><i class="navaid"></i>Navaid</span>
             <span><i class="mission"></i>Mission fix</span>
-            <span><i class="isr"></i>ISR task</span>
-            <span><i class="strike"></i>Strike task</span>
+            <span><i class="isr"></i>ISR</span>
+            <span><i class="strike"></i>Strike</span>
+            <span><i class="threat"></i>Threat</span>
             <span><i class="route"></i>Route</span>
           </div>
         </section>
 
         <section class="panel" aria-labelledby="fleet-title">
-          <div class="panel-head">
-            <h2 id="fleet-title" class="panel-title">Aircraft & routes</h2>
-          </div>
-          <p class="hint">
-            Select an aircraft, then insert a new strike to force full
-            re-generation and fuel re-propagation.
-          </p>
+          <div class="panel-head"><h2 id="fleet-title" class="panel-title">Aircraft &amp; routes</h2></div>
+          <p class="hint">Select an aircraft, insert a strike, or open the Routes tab after planning.</p>
           <div id="fleet-list" class="list" aria-live="polite"></div>
-
           <h3 class="panel-title" style="margin-top: 1.25rem">Dynamic insert</h3>
           <form id="insert-form" class="form" autocomplete="off">
-            <label>
-              Aircraft
-              <select id="insert-aircraft" required></select>
-            </label>
-            <label>
-              Task id
-              <input id="insert-id" name="task_id" value="STK-NEW" required />
-            </label>
-            <label>
-              Lat
-              <input id="insert-lat" name="lat" type="number" step="0.01" value="29.60" required />
-            </label>
-            <label>
-              Lon
-              <input id="insert-lon" name="lon" type="number" step="0.01" value="47.65" required />
-            </label>
+            <label>Aircraft <select id="insert-aircraft" required></select></label>
+            <label>Task id <input id="insert-id" value="STK-NEW" required /></label>
+            <label>Lat <input id="insert-lat" type="number" step="0.01" value="29.60" required /></label>
+            <label>Lon <input id="insert-lon" type="number" step="0.01" value="47.65" required /></label>
             <div class="form-actions">
-              <button class="btn btn-primary" type="submit" id="btn-insert-submit" disabled>
-                Insert &amp; re-assess
-              </button>
+              <button class="btn btn-primary" type="submit" id="btn-insert-submit" disabled>Insert &amp; re-assess</button>
             </div>
           </form>
         </section>
       </main>
 
-      <!-- Help & documentation heuristic -->
+      <!-- ROUTES VIEW (battlespace table + debrief timeline) -->
+      <main id="view-routes" class="routes-view view" data-view-panel="routes" hidden>
+        <section class="metrics-bar" id="routes-metrics" aria-label="Plan metrics"></section>
+
+        <div class="routes-body">
+          <section class="route-threat-panel" aria-label="Generated routes">
+            <header>
+              <h2>Generated routes</h2>
+              <p class="hint">Battlespace-style route list · closest threat band Strike ≤50 / EJ ≤100 / Jam ≤160 nm</p>
+            </header>
+            <div class="table-wrap">
+              <table id="routes-table">
+                <thead>
+                  <tr>
+                    <th>Route</th>
+                    <th>Type</th>
+                    <th>Tasks</th>
+                    <th>Dist</th>
+                    <th>Closest</th>
+                    <th>Band</th>
+                    <th>Wpn</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="routes-tbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <aside class="route-inspect" aria-label="Selected route timeline">
+            <div class="inspect-head">
+              <h2 id="inspect-title">Select a route</h2>
+              <button type="button" class="btn btn-primary" id="btn-more-details" disabled>More details</button>
+            </div>
+            <div id="route-timeline" class="debrief-timeline" aria-label="Mission timeline"></div>
+            <div id="route-milestones" class="milestones" aria-label="Key events"></div>
+          </aside>
+        </div>
+      </main>
+
+      <!-- DETAILS DRAWER (battlespace map + threats + tasks) -->
+      <div id="details-drawer" class="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="drawer-title">
+        <div class="drawer-backdrop" data-close-drawer></div>
+        <div class="drawer-panel">
+          <header class="drawer-head">
+            <div>
+              <h2 id="drawer-title">Route details</h2>
+              <p id="drawer-sub" class="hint"></p>
+            </div>
+            <button type="button" class="btn btn-ghost" data-close-drawer>Close</button>
+          </header>
+          <div class="drawer-grid">
+            <section class="map-panel">
+              <div class="map-frame tall">
+                <svg id="detail-map" viewBox="0 0 640 520" role="img" aria-label="Route map with threats"></svg>
+              </div>
+              <div id="detail-segment-timeline" class="segment-timeline" aria-label="Route segment timeline"></div>
+            </section>
+            <section class="detail-side">
+              <h3 class="panel-title">Threats on route</h3>
+              <div id="detail-threats" class="table-wrap compact"></div>
+              <h3 class="panel-title" style="margin-top:1rem">Task breakout</h3>
+              <div id="detail-tasks" class="list"></div>
+            </section>
+          </div>
+        </div>
+      </div>
+
       <details class="help">
-        <summary>IxDF-guided workflow · keyboard shortcuts · proximity rules</summary>
+        <summary>Workflow · shortcuts · cross-tool alignment</summary>
         <div class="help-grid">
-          <div>
-            <strong>1. Visibility of status</strong>
-            GO / NO-GO, fuel bars, and unallocated counts update after every cycle.
-          </div>
-          <div>
-            <strong>2. Real-world language</strong>
-            PSAB launch, Kuwait / Iraq tasks, published navaids and mission fixes.
-          </div>
-          <div>
-            <strong>3. User control</strong>
-            Reset restores the demo world. Re-run the plan anytime. Export for o-my-sim.
-          </div>
-          <div>
-            <strong>4–5. Consistency &amp; prevention</strong>
-            Insert stays disabled until a plan exists; duplicate task ids are rejected.
-          </div>
-          <div>
-            <strong>9. Recover from errors</strong>
-            NO-GO routes show an explicit fuel-reserve reason you can act on.
-          </div>
-          <div>
-            <strong>Shortcuts</strong>
-            <span class="item-meta">P plan · E export · I insert · R reset · ? help</span>
-          </div>
-          <div>
-            <strong>Proximity</strong>
-            Published waypoints only. Success: a fix within 80 nmi of ISR / 20 nmi of strike.
-          </div>
-          <div>
-            <strong>o-my-sim</strong>
-            Export writes GO routes for import/publish on launch — see docs/OMY-SIM-ROUTES.md
-          </div>
-          <div>
-            <strong>API</strong>
-            Swagger at <a href="/docs">/docs</a> · health <a href="/api/health">/api/health</a>
-          </div>
+          <div><strong>Plan tab</strong> Guess-and-see allocation + fuel GO/NO-GO (existing console).</div>
+          <div><strong>Routes tab</strong> Battlespace-manager route table + o-my-debrief timeline / key events.</div>
+          <div><strong>More details</strong> Map + threat bands + task breakout (battlespace layout).</div>
+          <div><strong>Shortcuts</strong> P plan · E export · I insert · R reset · 1 Plan · 2 Routes · ? help</div>
         </div>
       </details>
     </div>
-
-    <div id="toasts" class="toast-host" aria-live="assertive" aria-atomic="true"></div>
+    <div id="toasts" class="toast-host" aria-live="assertive"></div>
     <script src="/assets/app.js" type="module"></script>
   </body>
 </html>

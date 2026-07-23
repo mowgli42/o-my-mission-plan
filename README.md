@@ -34,6 +34,8 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 | Dynamic task insertion + re-propagation | Done |
 | Final route export for o-my-sim (`uci.route` on launch) | Done |
 | Dark-theme IxDF planning UI | Done |
+| Routes overview (battlespace table + debrief timeline) | Done |
+| Route details drawer (map + threats + tasks) | Done |
 | Unit / API tests | Done (`make test`) |
 
 ---
@@ -51,7 +53,7 @@ make demo
 2. **Export for o-my-sim** (or press `E`) → writes `data/routes/gulf-war-psab-001-routes-latest.json`
 3. Point o-my-sim at that file; it publishes each GO route on launch
 
-Keyboard shortcuts: **P** plan · **E** export · **I** insert strike · **R** reset · **?** help.
+Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset · **1**/**2** Plan/Routes · **?** help.
 
 ---
 
@@ -68,6 +70,7 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert strike · **R** r
 | `propagator.py` | Constant burn + fixed reserve → GO / NO-GO |
 | `planning.py` | Full plan cycle + dynamic insert |
 | `export_routes.py` | o-my-sim import bundle (`o-my.mission-plan.routes/v1`) |
+| `routes_overview.py` | Metrics, threat bands, debrief-style timelines |
 | `app.py` | FastAPI service + static UI |
 
 ### API
@@ -83,6 +86,7 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert strike · **R** r
 | POST | `/api/propagate` | Fuel-propagate an arbitrary route |
 | POST | `/api/routes/export` | Write final GO routes for o-my-sim |
 | GET | `/api/routes/export` | Build export bundle without writing |
+| GET | `/api/routes/overview` | Routes screen: metrics, threats, timelines |
 | GET | `/` | Dark planning UI |
 | GET | `/docs` | Swagger |
 
@@ -95,16 +99,33 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert strike · **R** r
 
 ### UI (IxDF principles)
 
-Dark ops console emphasizing status visibility (GO / NO-GO, fuel bars), real-world
-theater language (PSAB, Kuwait, Iraq), export for sim handoff, and recoverable
-NO-GO / unallocated feedback.
+Dark ops console aligned with **o-my-debrief** (timeline / key events) and
+**battlespace-manager** (route table, threat bands, map + segment timeline).
+Plan tab for guess-and-see cycles; Routes tab for fleet overview metrics and
+per-route inspection; More details for map / threats / task breakout.
 
 ---
 
 ## Screenshots
 
-Screenshots under `docs/screenshots/` were captured from an earlier Florida demo UI;
-re-run `make screenshots` after `make demo` to refresh for the PSAB theater map.
+### 1. Plan tab — PSAB / Kuwait / Iraq
+
+![Plan PSAB world](docs/screenshots/01-plan-psab-world.png)
+
+### 2. Routes overview — metrics + battlespace-style route list
+
+Top-line metrics: aircraft count, assigned ISR/strike breakout, skipped tasks, weapons utilized.
+
+![Routes overview](docs/screenshots/02-routes-overview-metrics.png)
+
+### 3. Route timeline / key events (o-my-debrief alignment)
+
+![Route timeline](docs/screenshots/03-route-timeline-events.png)
+
+### 4. More details — map, threats, task breakout (battlespace-manager layout)
+
+![Route details](docs/screenshots/04-route-details-map-threats.png)
+
 
 ---
 

@@ -51,6 +51,7 @@ class WorldSnapshot(BaseModel):
     mission_waypoints: list
     aircraft: list
     tasks: list
+    threats: list = Field(default_factory=list)
 
 
 class PlanningSession:
@@ -65,6 +66,7 @@ class PlanningSession:
         self.mission_waypoints: dict[str, PublishedFix] = dict(
             demo_world.MISSION_WAYPOINTS
         )
+        self.threats = deepcopy(demo_world.THREATS)
         self.aircraft = deepcopy(demo_world.AIRCRAFT)
         self.tasks = deepcopy(demo_world.TASKS)
         self.task_index: dict[str, Task] = {t.id: t for t in self.tasks}
@@ -92,6 +94,7 @@ class PlanningSession:
             ],
             aircraft=self.aircraft,
             tasks=self.tasks,
+            threats=self.threats,
         )
 
     def _generate(self, ac, assigned) -> tuple[Route, FuelState]:
@@ -237,6 +240,16 @@ class PlanningSession:
             self.last_export_paths = write_export_bundle(bundle, directory=directory)
             bundle = {**bundle, "written_paths": dict(self.last_export_paths)}
         return bundle
+
+    def routes_overview(self) -> dict[str, Any]:
+        """Battlespace / debrief-aligned routes overview payload."""
+        if self.latest is None:
+            raise RuntimeError("No plan yet — run a plan cycle first")
+        from .routes_overview import build_routes_overview
+
+        return build_routes_overview(
+            self.latest, self.aircraft, self.tasks, self.threats
+        )
 
 
 def make_demo_insert_task(

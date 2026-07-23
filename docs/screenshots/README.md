@@ -4,15 +4,14 @@ Captured from the running FastAPI UI (`make demo` → http://localhost:8000).
 
 | File | Scene |
 |------|-------|
-| `01-initial-dark-ui.png` | Fresh demo world before planning |
-| `02-plan-cycle-go-nogo.png` | After **Run plan cycle** — assignments, routes, status strip |
-| `03-dynamic-insert-reassess.png` | After inserting `STK-SHOT` on FTR-1 |
-| `04-ixdf-help-panel.png` | Expanded IxDF / shortcuts help |
+| `01-plan-psab-world.png` | Plan tab — PSAB / Kuwait / Iraq world |
+| `02-routes-overview-metrics.png` | Routes tab — metrics + battlespace-style route table |
+| `03-route-timeline-events.png` | Selected route — debrief-style timeline + key events |
+| `04-route-details-map-threats.png` | More details — map, threats, task breakout, segment timeline |
 
 Regenerate:
 
 ```bash
-# server already on :8000
-npm install
-node scripts/capture_screenshots.mjs
+make demo   # in one terminal
+make screenshots
 ```

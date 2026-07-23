@@ -67,3 +67,16 @@ Strike at Mutla Ridge, Basra area, Baghdad south.
 - Unallocated tasks after allocation
 - Assigned tasks with no published fix in range
 - GO / NO-GO fuel feasibility per route
+- Routes overview metrics: assigned ISR/strike breakout, skipped tasks, aircraft count, weapons utilized
+- Per-route threat bands (battlespace-style) and debrief-style key events
+
+## Demo threats (route impact)
+
+| ID | Kind | Approx location | Notes |
+|----|------|-----------------|-------|
+| THREAT-SAM-01 | SAM | Kuwait north | HIGH |
+| THREAT-AAA-02 | AAA | Basra | MEDIUM |
+| THREAT-SAM-03 | SAM | Baghdad south | CRITICAL |
+| THREAT-INT-04 | FIGHTER | CAP corridor | MEDIUM |
+
+Bands match battlespace-manager: Strike ≤50 / EJ ≤100 / Jam ≤160 nm.

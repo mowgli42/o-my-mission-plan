@@ -1,19 +1,22 @@
 /**
  * o-my Mission Plan UI
- * IxDF / Nielsen heuristics: status visibility, recognition over recall,
- * explicit error recovery, user control (reset), progressive disclosure.
+ * Plan console + Routes overview (battlespace table + debrief timeline)
+ * + details drawer (battlespace map / threats / tasks).
  */
 
 const state = {
   world: null,
   plan: null,
+  overview: null,
   selectedAircraftId: null,
+  selectedRouteId: null,
+  selectedEventId: null,
+  view: "plan",
 };
 
-const $ = (sel) => document.querySelector(sel);
-
-/* ---- Geographic projection (Gulf War / PSAB → Kuwait / Iraq) ---- */
 const BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 function project(lat, lon) {
   const x = ((lon - BOUNDS.minLon) / (BOUNDS.maxLon - BOUNDS.minLon)) * 600 + 20;
@@ -63,6 +66,26 @@ function statusBadge(status) {
   return `<span class="badge badge-idle">IDLE</span>`;
 }
 
+function bandClass(band) {
+  return `band band-${String(band || "out").toLowerCase()}`;
+}
+
+function markerGlyph(marker) {
+  if (marker === "diamond") return "◆";
+  if (marker === "caret") return "▼";
+  if (marker === "flag") return "⚑";
+  return "·";
+}
+
+function markerColor(marker) {
+  if (marker === "diamond") return "var(--collect)";
+  if (marker === "caret") return "var(--strike)";
+  if (marker === "flag") return "var(--verify)";
+  return "var(--muted)";
+}
+
+/* ---------- Plan view (existing) ---------- */
+
 function assignedSet() {
   const set = new Set();
   if (!state.plan) return set;
@@ -93,10 +116,7 @@ function renderTasks() {
       else if (assigned.has(t.id)) flag = `<span class="badge badge-go">Assigned</span>`;
       return `
         <article class="item">
-          <div class="item-row">
-            <span class="item-id">${t.id}</span>
-            ${typeBadge(t.type)}
-          </div>
+          <div class="item-row"><span class="item-id">${t.id}</span>${typeBadge(t.type)}</div>
           <div class="item-meta">${t.label || "—"} · ${t.location.lat.toFixed(2)}, ${t.location.lon.toFixed(2)}</div>
           <div class="item-row" style="margin-top:0.35rem">${flag}</div>
         </article>`;
@@ -126,7 +146,7 @@ function renderFleet() {
           : null;
       const low = plan?.fuel && !plan.fuel.feasible;
       const unsat = (plan?.unsatisfied_task_ids || []).length
-        ? `<div class="reason" role="status">Unsatisfied (no published fix in range): ${(plan.unsatisfied_task_ids || []).join(", ")}</div>`
+        ? `<div class="reason" role="status">Unsatisfied: ${(plan.unsatisfied_task_ids || []).join(", ")}</div>`
         : "";
       const reason =
         plan?.route?.infeasible_reason || plan?.fuel?.infeasible_reason
@@ -135,23 +155,20 @@ function renderFleet() {
       const tasks = (plan?.assigned_task_ids || []).join(", ") || "none";
       const dist = plan?.route ? `${plan.route.total_distance_nmi} nmi` : "—";
       const wps = plan?.route?.waypoints?.map((w) => w.id).join(" → ") || "";
+      const wpn = a.weapons_loadout != null ? ` · wpn ${a.weapons_loadout}` : "";
       return `
-        <article class="item ${selected}" data-aircraft="${a.id}" tabindex="0" role="button" aria-pressed="${selected ? "true" : "false"}">
-          <div class="item-row">
-            <span class="item-id">${a.label || a.id}</span>
-            ${statusBadge(status)}
-          </div>
-          <div class="item-meta">${typeBadge(a.type)} · home ${a.home_base_id} · tasks ${tasks}</div>
+        <article class="item ${selected}" data-aircraft="${a.id}" tabindex="0" role="button">
+          <div class="item-row"><span class="item-id">${a.label || a.id}</span>${statusBadge(status)}</div>
+          <div class="item-meta">${typeBadge(a.type)} · home ${a.home_base_id} · tasks ${tasks}${wpn}</div>
           <div class="item-meta">Route ${dist} · burn ${a.burn_rate_per_nmi}/nmi · reserve ${a.reserve_fuel}</div>
           ${wps ? `<div class="item-meta">Fixes ${wps}</div>` : ""}
           ${
             fuelPct != null
-              ? `<div class="fuel-bar ${low ? "low" : ""}" title="Final fuel ${plan.fuel.final_fuel}"><span style="width:${fuelPct}%"></span></div>
+              ? `<div class="fuel-bar ${low ? "low" : ""}"><span style="width:${fuelPct}%"></span></div>
                  <div class="item-meta">Final fuel ${plan.fuel.final_fuel} / ${a.initial_fuel}</div>`
               : ""
           }
-          ${unsat}
-          ${reason}
+          ${unsat}${reason}
         </article>`;
     })
     .join("");
@@ -161,7 +178,7 @@ function renderFleet() {
       state.selectedAircraftId = el.dataset.aircraft;
       $("#insert-aircraft").value = state.selectedAircraftId;
       renderFleet();
-      renderMap();
+      renderMap("#map", { showThreats: true });
     };
     el.addEventListener("click", pick);
     el.addEventListener("keydown", (e) => {
@@ -181,90 +198,381 @@ function renderStats() {
   $("#stat-idle").textContent = s ? s.idle : "—";
 }
 
-function renderMap() {
-  const svg = $("#map");
+function renderMap(svgSel = "#map", opts = {}) {
+  const svg = $(svgSel);
   const w = state.world;
-  if (!w) {
-    svg.innerHTML = "";
+  if (!svg || !w) {
+    if (svg) svg.innerHTML = "";
     return;
   }
-
   const parts = [];
-  // Decorative Gulf theater outline (not precise geography)
   parts.push(`
     <path d="M80,460 C140,430 180,380 220,300 C260,220 300,160 360,120 C420,80 480,70 540,90 C560,140 550,220 520,280 C490,340 450,400 400,440 C340,480 200,500 80,460 Z"
-      fill="rgba(61,184,160,0.04)" stroke="rgba(61,184,160,0.18)" stroke-width="1.5"/>
-  `);
+      fill="rgba(61,214,198,0.04)" stroke="rgba(61,214,198,0.18)" stroke-width="1.5"/>`);
 
   for (const n of w.navaids || []) {
     const [x, y] = project(n.location.lat, n.location.lon);
-    parts.push(`
-      <g>
-        <circle cx="${x}" cy="${y}" r="3.5" fill="#5c6b7e"/>
-        <text x="${x + 6}" y="${y + 3}" fill="#5c6b7e" font-size="9" font-family="IBM Plex Mono, monospace">${n.id}</text>
-      </g>`);
+    parts.push(`<g><circle cx="${x}" cy="${y}" r="3.5" fill="#5c6b7e"/><text x="${x + 6}" y="${y + 3}" fill="#5c6b7e" font-size="9" font-family="IBM Plex Mono, monospace">${n.id}</text></g>`);
   }
-
   for (const m of w.mission_waypoints || []) {
     const [x, y] = project(m.location.lat, m.location.lon);
-    parts.push(`
-      <g>
-        <polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/>
-        <text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text>
-      </g>`);
+    parts.push(`<g><polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/><text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text></g>`);
   }
-
+  if (opts.showThreats !== false) {
+    for (const th of w.threats || []) {
+      const loc = th.location || th;
+      const lat = loc.lat ?? th.latitude;
+      const lon = loc.lon ?? th.longitude;
+      const [x, y] = project(lat, lon);
+      parts.push(`<g><circle cx="${x}" cy="${y}" r="6" fill="rgba(239,68,68,0.25)" stroke="#ef4444" stroke-width="1.5"/><text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id || th.kind}</text></g>`);
+    }
+  }
   for (const b of w.airbases || []) {
     const [x, y] = project(b.location.lat, b.location.lon);
     const launch = b.id === (w.launch_base_id || "OEPS");
-    parts.push(`
-      <g>
-        <rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${launch ? "#3db8a0" : "#2a7f6e"}" transform="rotate(45 ${x} ${y})"/>
-        <text x="${x + 8}" y="${y - 6}" fill="#e6edf5" font-size="10" font-family="IBM Plex Mono, monospace">${b.id}${launch ? " ★" : ""}</text>
-      </g>`);
+    parts.push(`<g><rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${launch ? "#3dd6c6" : "#2a9a8e"}" transform="rotate(45 ${x} ${y})"/><text x="${x + 8}" y="${y - 6}" fill="#e8eef8" font-size="10" font-family="IBM Plex Mono, monospace">${b.id}${launch ? " ★" : ""}</text></g>`);
   }
-
   for (const t of w.tasks || []) {
     const [x, y] = project(t.location.lat, t.location.lon);
-    const color = t.type === "ISR" ? "#5aa9e6" : "#e07a3a";
-    parts.push(`
-      <g>
-        <circle cx="${x}" cy="${y}" r="5" fill="${color}" opacity="0.9"/>
-        <text x="${x + 7}" y="${y + 3}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${t.id}</text>
-      </g>`);
+    const color = t.type === "ISR" ? "#4da3ff" : "#ff7a45";
+    parts.push(`<g><circle cx="${x}" cy="${y}" r="5" fill="${color}" opacity="0.9"/><text x="${x + 7}" y="${y + 3}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${t.id}</text></g>`);
   }
 
-  const plans = state.plan?.plans || [];
-  for (const p of plans) {
-    if (!p.route?.waypoints?.length) continue;
+  const routeSource = opts.route
+    ? [opts.route]
+    : (state.plan?.plans || []).filter((p) => p.route?.waypoints?.length);
+
+  for (const p of routeSource) {
+    const route = p.route || p;
+    const wps = route.waypoints || [];
+    if (!wps.length) continue;
     const selected =
-      !state.selectedAircraftId || p.aircraft_id === state.selectedAircraftId;
-    const pts = p.route.waypoints
-      .map((wp) => project(wp.location.lat, wp.location.lon).join(","))
+      opts.forceSelected ||
+      !state.selectedAircraftId ||
+      p.aircraft_id === state.selectedAircraftId ||
+      p.route_name;
+    const pts = wps
+      .map((wp) => project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon).join(","))
       .join(" ");
-    const cls = p.status === "NO-GO" ? "route-path nogo" : "route-path";
+    const nogo = (p.status || "") === "NO-GO";
+    const cls = nogo ? "route-path nogo" : "route-path";
     const opacity = selected ? 0.95 : 0.25;
     const width = selected ? 2.5 : 1.5;
-    parts.push(
-      `<polyline class="${cls}" points="${pts}" opacity="${opacity}" stroke-width="${width}"/>`,
-    );
+    // Colored segments if provided
+    if (opts.segments?.length) {
+      for (const seg of opts.segments) {
+        const a = wps[seg.index];
+        const b = wps[seg.index + 1];
+        if (!a || !b) continue;
+        const [x1, y1] = project(a.lat ?? a.location?.lat, a.lon ?? a.location?.lon);
+        const [x2, y2] = project(b.lat ?? b.location?.lat, b.lon ?? b.location?.lon);
+        parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${seg.color}" stroke-width="3" opacity="0.9"/>`);
+      }
+    } else {
+      parts.push(`<polyline class="${cls}" points="${pts}" opacity="${opacity}" stroke-width="${width}"/>`);
+    }
     if (selected) {
-      for (const wp of p.route.waypoints) {
-        const [x, y] = project(wp.location.lat, wp.location.lon);
-        parts.push(
-          `<circle cx="${x}" cy="${y}" r="2.5" fill="${p.status === "NO-GO" ? "#d45a5a" : "#3db8a0"}"/>`,
-        );
+      for (const wp of wps) {
+        const [x, y] = project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon);
+        parts.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="${nogo ? "#ff5c6c" : "#3dd6c6"}"/>`);
       }
     }
   }
-
   svg.innerHTML = parts.join("");
+}
+
+/* ---------- Routes overview ---------- */
+
+function renderMetrics() {
+  const m = state.overview?.metrics;
+  const host = $("#routes-metrics");
+  if (!m) {
+    host.innerHTML = `<div class="empty">Run a plan cycle to populate routes.</div>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="metric"><span class="metric-val">${m.aircraft_count}</span><span class="metric-lbl">Aircraft</span><span class="metric-sub">${m.aircraft_go} GO · ${m.aircraft_nogo} NO-GO · ${m.aircraft_idle} idle</span></div>
+    <div class="metric"><span class="metric-val isr">${m.assigned_isr}</span><span class="metric-lbl">Assigned ISR</span><span class="metric-sub">${m.assigned_total} total assigned</span></div>
+    <div class="metric"><span class="metric-val strike">${m.assigned_strike}</span><span class="metric-lbl">Assigned strike</span></div>
+    <div class="metric"><span class="metric-val warn">${m.skipped_tasks}</span><span class="metric-lbl">Skipped tasks</span><span class="metric-sub">${(m.skipped_task_ids || []).slice(0, 4).join(", ") || "—"}</span></div>
+    <div class="metric"><span class="metric-val">${m.weapons_utilized}</span><span class="metric-lbl">Weapons utilized</span><span class="metric-sub">of ${m.weapons_loadout_total} loadout</span></div>
+  `;
+}
+
+function renderRoutesTable() {
+  const tbody = $("#routes-tbody");
+  const routes = state.overview?.routes || [];
+  if (!routes.length) {
+    tbody.innerHTML = `<tr class="empty"><td colspan="9">No routes — run a plan cycle</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = routes
+    .map((r) => {
+      const prim = r.primary_threat;
+      const band = prim?.band || "OUT";
+      const closest = prim ? `${prim.closest_approach_nm.toFixed(1)} nm` : "—";
+      const sel = state.selectedRouteId === r.aircraft_id ? "selected" : "";
+      const sev = (prim?.severity || "").toLowerCase();
+      return `<tr class="${sel} ${sev}" data-route="${r.aircraft_id}">
+        <td><button type="button" class="linkish"><strong>${r.route_name}</strong></button><div class="item-meta">${r.callsign}</div></td>
+        <td>${typeBadge(r.aircraft_type)}</td>
+        <td>${r.task_breakout.isr} ISR · ${r.task_breakout.strike} STK</td>
+        <td class="num">${r.total_distance_nmi.toFixed(0)} nm</td>
+        <td class="num">${closest}</td>
+        <td><span class="${bandClass(band)}">${band}</span></td>
+        <td class="num">${r.weapons_utilized}/${r.weapons_loadout}</td>
+        <td>${statusBadge(r.status)}</td>
+        <td><button type="button" class="btn btn-ghost btn-details" data-details="${r.aircraft_id}">Details</button></td>
+      </tr>`;
+    })
+    .join("");
+
+  tbody.querySelectorAll("tr[data-route]").forEach((tr) => {
+    tr.addEventListener("click", (e) => {
+      if (e.target.closest("[data-details]")) return;
+      selectRoute(tr.dataset.route);
+    });
+  });
+  tbody.querySelectorAll("[data-details]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectRoute(btn.dataset.details);
+      openDetails();
+    });
+  });
+}
+
+function selectedRoute() {
+  return (state.overview?.routes || []).find((r) => r.aircraft_id === state.selectedRouteId) || null;
+}
+
+function selectRoute(id) {
+  state.selectedRouteId = id;
+  state.selectedEventId = null;
+  renderRoutesTable();
+  renderInspect();
+  $("#btn-more-details").disabled = !selectedRoute();
+}
+
+function renderInspect() {
+  const r = selectedRoute();
+  const title = $("#inspect-title");
+  if (!r) {
+    title.textContent = "Select a route";
+    $("#route-timeline").innerHTML = "";
+    $("#route-milestones").innerHTML = `<p class="empty">Pick a route from the table to see the end-to-end timeline and key events.</p>`;
+    return;
+  }
+  title.textContent = `${r.route_name} · ${r.callsign}`;
+  renderDebriefTimeline(r);
+  renderMilestones(r);
+}
+
+function renderDebriefTimeline(route) {
+  const events = route.timeline_events || [];
+  const host = $("#route-timeline");
+  if (!events.length) {
+    host.innerHTML = `<div class="empty">No timeline events</div>`;
+    return;
+  }
+  const maxD = Math.max(...events.map((e) => e.distance_nmi), 1);
+  const active = events.find((e) => e.event_id === state.selectedEventId) || events[0];
+  const fillPct = (active.distance_nmi / maxD) * 100;
+  host.innerHTML = `
+    <div class="tl-meta">
+      <span class="mono">T+0</span>
+      <span>Mission timeline · ◆ collect · ▼ strike · ⚑ launch/recover</span>
+      <span class="mono">${maxD.toFixed(0)} nm</span>
+    </div>
+    <div class="tl-track" role="slider" aria-label="Route timeline">
+      <div class="tl-fill" style="width:${fillPct}%"></div>
+      ${events
+        .filter((e) => e.marker && e.marker !== "none")
+        .map((e) => {
+          const pct = (e.distance_nmi / maxD) * 100;
+          const activeCls = e.event_id === active.event_id ? "active" : "";
+          return `<button type="button" class="tl-marker ${activeCls}" data-event="${e.event_id}"
+            style="left:${pct}%; color:${markerColor(e.marker)}" title="${e.title}">${markerGlyph(e.marker)}</button>`;
+        })
+        .join("")}
+      <div class="tl-playhead" style="left:${fillPct}%"></div>
+    </div>
+    <div class="item-meta" style="margin-top:0.45rem">${active.sim_offset} · ${active.title}</div>
+  `;
+  host.querySelectorAll("[data-event]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.selectedEventId = btn.dataset.event;
+      renderInspect();
+    });
+  });
+}
+
+function renderMilestones(route) {
+  const events = route.timeline_events || [];
+  const host = $("#route-milestones");
+  host.innerHTML = events
+    .map((e) => {
+      const active = e.event_id === state.selectedEventId ? "active" : "";
+      return `<button type="button" class="milestone ${active}" data-event="${e.event_id}">
+        <div class="ms-row">
+          <span style="color:${markerColor(e.marker)}">${markerGlyph(e.marker)}</span>
+          <span class="mono">${e.sim_offset}</span>
+          <span class="badge badge-idle" style="margin-left:auto">${e.status}</span>
+        </div>
+        <div class="ms-title">${e.title}</div>
+        <div class="ms-out">${e.outcome || e.summary}</div>
+      </button>`;
+    })
+    .join("");
+  host.querySelectorAll("[data-event]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.selectedEventId = btn.dataset.event;
+      renderInspect();
+    });
+  });
+}
+
+/* ---------- Details drawer ---------- */
+
+function openDetails() {
+  const r = selectedRoute();
+  if (!r) return;
+  const drawer = $("#details-drawer");
+  drawer.hidden = false;
+  $("#drawer-title").textContent = `${r.route_name} · ${r.callsign}`;
+  const prim = r.primary_threat;
+  $("#drawer-sub").textContent = prim
+    ? `Closest threat ${prim.threat_id} · ${prim.closest_approach_nm.toFixed(1)} nm · ${prim.band} · ${prim.severity}`
+    : "No threats within 160 nm jam radius";
+
+  const segs = prim?.segments || [];
+  renderMap("#detail-map", {
+    route: r,
+    forceSelected: true,
+    segments: segs,
+    showThreats: true,
+  });
+  // Also draw threats from overview
+  renderDetailThreats(r);
+  renderDetailTasks(r);
+  renderSegmentTimeline(r);
+}
+
+function closeDetails() {
+  $("#details-drawer").hidden = true;
+}
+
+function renderDetailThreats(route) {
+  const host = $("#detail-threats");
+  const rows = route.threats || [];
+  if (!rows.length) {
+    host.innerHTML = `<table><tbody><tr class="empty"><td>No threats within jam radius</td></tr></tbody></table>`;
+    return;
+  }
+  host.innerHTML = `<table>
+    <thead><tr><th>Threat</th><th>Kind</th><th>Closest</th><th>Band</th><th>Segs</th><th>Severity</th></tr></thead>
+    <tbody>
+      ${rows
+        .map(
+          (t) => `<tr class="${(t.severity || "").toLowerCase()}">
+        <td><strong>${t.threat_id}</strong><div class="item-meta">${t.threat_label}</div></td>
+        <td>${t.threat_kind}</td>
+        <td>${t.closest_approach_nm.toFixed(1)} nm</td>
+        <td><span class="${bandClass(t.band)}">${t.band}</span></td>
+        <td>${t.impacted_segment_count}</td>
+        <td>${t.severity}</td>
+      </tr>`,
+        )
+        .join("")}
+    </tbody></table>`;
+}
+
+function renderDetailTasks(route) {
+  const host = $("#detail-tasks");
+  const tasks = route.tasks || [];
+  if (!tasks.length) {
+    host.innerHTML = `<div class="empty">No assigned tasks</div>`;
+    return;
+  }
+  host.innerHTML = tasks
+    .map(
+      (t) => `<article class="item">
+      <div class="item-row"><span class="item-id">${t.id}</span>${typeBadge(t.type)}</div>
+      <div class="item-meta">${t.label || "—"} · ${t.lat.toFixed(2)}, ${t.lon.toFixed(2)} · pri ${t.priority}</div>
+    </article>`,
+    )
+    .join("");
+}
+
+function renderSegmentTimeline(route) {
+  const host = $("#detail-segment-timeline");
+  const prim = route.primary_threat;
+  const segs = prim?.segments || [];
+  const total = route.total_distance_nmi || 0;
+  const tasks = route.tasks || [];
+  const cum = prim?.cumulative_nmi || [0];
+  const closestPct =
+    total && cum.length
+      ? (((cum[prim.closest_index] || 0) + (cum[prim.closest_index + 1] || 0)) / 2 / total) * 100
+      : 0;
+
+  const taskMarks = tasks
+    .map((t) => {
+      // place near mid-route for display if no exact association
+      const wpIdx = (route.waypoints || []).findIndex((w) => w.associated_task_id === t.id);
+      let pct = 50;
+      if (wpIdx >= 0 && cum[wpIdx] != null && total) pct = (cum[wpIdx] / total) * 100;
+      return `<span class="task-mark" style="left:${pct}%" title="${t.id}">${t.type.slice(0, 3)}</span>`;
+    })
+    .join("");
+
+  host.innerHTML = `
+    <h3>Route timeline · ${route.route_name}</h3>
+    <p class="hint">${prim ? `${prim.threat_id} closest ${prim.closest_approach_nm.toFixed(1)} nm · ${prim.severity}` : "No primary threat"} · distance axis</p>
+    <div class="seg-tracks">
+      <div class="seg-label">Impact</div>
+      <div class="seg-line">
+        ${
+          segs.length
+            ? segs
+                .map(
+                  (s) =>
+                    `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="Seg ${s.index + 1} · ${s.closest_nm} nm · ${s.band}"></span>`,
+                )
+                .join("")
+            : `<span class="seg" style="flex:1;background:#64748b"></span>`
+        }
+        ${prim ? `<span class="threat-mark" style="left:${closestPct}%">▼</span>` : ""}
+      </div>
+      <div class="seg-label">Onboard</div>
+      <div class="task-rail"><div class="rail"></div>${taskMarks}</div>
+      <div class="seg-label"></div>
+      <div class="seg-axis"><span>0 nm</span><span>${total.toFixed(0)} nm</span></div>
+    </div>
+  `;
+}
+
+/* ---------- View / wiring ---------- */
+
+function setView(name) {
+  state.view = name;
+  $$(".tab").forEach((t) => {
+    const on = t.dataset.view === name;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  $$("[data-view-panel]").forEach((p) => {
+    const on = p.dataset.viewPanel === name;
+    p.hidden = !on;
+    p.classList.toggle("active", on);
+  });
 }
 
 function setPlanReady(ready) {
   $("#btn-insert").disabled = !ready;
   $("#btn-insert-submit").disabled = !ready;
   $("#btn-export").disabled = !ready;
+  $("#tab-routes").disabled = !ready;
 }
 
 async function loadWorld() {
@@ -279,34 +587,29 @@ async function loadWorld() {
   renderTasks();
   renderFleet();
   renderStats();
-  renderMap();
+  renderMap("#map", { showThreats: true });
 }
 
-async function exportRoutes() {
-  try {
-    const bundle = await api("/api/routes/export", {
-      method: "POST",
-      body: JSON.stringify({ include_nogo: false, write: true }),
-    });
-    const n = bundle.summary?.route_count ?? bundle.routes?.length ?? 0;
-    const path = bundle.written_paths?.latest || "data/routes/";
-    toast(`Exported ${n} GO route(s) for o-my-sim → ${path}`);
-  } catch (err) {
-    toast(String(err.message || err), "error");
+async function loadOverview() {
+  state.overview = await api("/api/routes/overview");
+  if (!state.selectedRouteId && state.overview.routes?.length) {
+    state.selectedRouteId = state.overview.routes[0].aircraft_id;
   }
+  renderMetrics();
+  renderRoutesTable();
+  renderInspect();
+  $("#btn-more-details").disabled = !selectedRoute();
 }
 
 async function runPlan() {
   try {
     state.plan = await api("/api/plan", { method: "POST" });
     setPlanReady(true);
-    // refresh world in case labels unchanged but we need task flags
     await loadWorld();
+    await loadOverview();
     const s = state.plan.summary;
-    toast(
-      `Plan complete · ${s.go} GO · ${s.nogo} NO-GO · ${s.unallocated} unallocated`,
-      s.nogo || s.unallocated ? "warn" : "info",
-    );
+    toast(`Plan complete · ${s.go} GO · ${s.nogo} NO-GO · ${s.unallocated} unallocated`, s.nogo || s.unallocated ? "warn" : "info");
+    setView("routes");
   } catch (err) {
     toast(String(err.message || err), "error");
   }
@@ -316,9 +619,26 @@ async function resetWorld() {
   try {
     await api("/api/reset", { method: "POST" });
     state.plan = null;
+    state.overview = null;
+    state.selectedRouteId = null;
     setPlanReady(false);
+    closeDetails();
+    setView("plan");
     await loadWorld();
     toast("Demo world reset");
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  }
+}
+
+async function exportRoutes() {
+  try {
+    const bundle = await api("/api/routes/export", {
+      method: "POST",
+      body: JSON.stringify({ include_nogo: false, write: true }),
+    });
+    const n = bundle.summary?.route_count ?? bundle.routes?.length ?? 0;
+    toast(`Exported ${n} GO route(s) → ${bundle.written_paths?.latest || "data/routes/"}`);
   } catch (err) {
     toast(String(err.message || err), "error");
   }
@@ -336,38 +656,24 @@ async function insertTask(fromForm = true) {
       lat: Number($("#insert-lat").value),
       lon: Number($("#insert-lon").value),
       priority: 3,
-      label: "Injected strike (dynamic)",
+      label: "Injected strike (dynamic) — Kuwait north",
     };
-    const planned = await api("/api/tasks/insert", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    const planned = await api("/api/tasks/insert", { method: "POST", body: JSON.stringify(body) });
     state.selectedAircraftId = planned.aircraft_id;
-    // bump id for next insert (error prevention / uniqueness)
     $("#insert-id").value = `STK-NEW-${Date.now() % 10000}`;
     state.world = await api("/api/world");
     state.plan = await api("/api/plan").catch(() => state.plan);
-    // Merge updated aircraft into latest plan locally if GET works
     if (state.plan) {
       state.plan.plans = state.plan.plans.map((p) =>
         p.aircraft_id === planned.aircraft_id ? planned : p,
       );
-      state.plan.summary = {
-        ...state.plan.summary,
-        go: state.plan.plans.filter((p) => p.status === "GO").length,
-        nogo: state.plan.plans.filter((p) => p.status === "NO-GO").length,
-        aircraft_planned: state.plan.plans.filter((p) => p.status !== "idle").length,
-        idle: state.plan.plans.filter((p) => p.status === "idle").length,
-      };
     }
+    await loadOverview();
     renderTasks();
     renderFleet();
     renderStats();
-    renderMap();
-    toast(
-      `${planned.aircraft_id} re-assessed → ${planned.status}`,
-      planned.status === "NO-GO" ? "warn" : "info",
-    );
+    renderMap("#map", { showThreats: true });
+    toast(`${planned.aircraft_id} re-assessed → ${planned.status}`, planned.status === "NO-GO" ? "warn" : "info");
   } catch (err) {
     toast(String(err.message || err), "error");
   }
@@ -378,6 +684,7 @@ function wire() {
   $("#btn-export").addEventListener("click", exportRoutes);
   $("#btn-reset").addEventListener("click", resetWorld);
   $("#btn-insert").addEventListener("click", () => insertTask(false));
+  $("#btn-more-details").addEventListener("click", openDetails);
   $("#insert-form").addEventListener("submit", (e) => {
     e.preventDefault();
     insertTask(true);
@@ -385,8 +692,15 @@ function wire() {
   $("#insert-aircraft").addEventListener("change", (e) => {
     state.selectedAircraftId = e.target.value;
     renderFleet();
-    renderMap();
+    renderMap("#map", { showThreats: true });
   });
+  $$(".tab").forEach((t) => {
+    t.addEventListener("click", () => {
+      if (t.disabled) return;
+      setView(t.dataset.view);
+    });
+  });
+  $$("[data-close-drawer]").forEach((el) => el.addEventListener("click", closeDetails));
 
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input, select, textarea")) return;
@@ -396,6 +710,9 @@ function wire() {
     }
     if (e.key === "r" || e.key === "R") resetWorld();
     if ((e.key === "i" || e.key === "I") && !$("#btn-insert").disabled) insertTask(false);
+    if (e.key === "1") setView("plan");
+    if (e.key === "2" && !$("#tab-routes").disabled) setView("routes");
+    if (e.key === "Escape") closeDetails();
     if (e.key === "?") {
       const help = document.querySelector(".help");
       help.open = !help.open;

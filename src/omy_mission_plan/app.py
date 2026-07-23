@@ -152,6 +152,21 @@ def get_exported_routes(include_nogo: bool = False):
     return session.export_routes_for_sim(include_nogo=include_nogo, write=False)
 
 
+@app.get("/api/routes/overview")
+def routes_overview():
+    """
+    Routes screen payload: top metrics, threat impact, debrief-style timelines.
+
+    Aligned with battlespace-manager route display + o-my-debrief key events.
+    """
+    if session.latest is None:
+        raise HTTPException(status_code=404, detail="No plan yet — POST /api/plan first")
+    try:
+        return session.routes_overview()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # Static UI
 # ---------------------------------------------------------------------------

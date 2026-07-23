@@ -24,27 +24,24 @@ async function shot(name) {
 
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForSelector(".brand-mark");
-await page.waitForTimeout(600);
-await shot("01-initial-dark-ui");
+await page.waitForTimeout(700);
+await shot("01-plan-psab-world");
 
 await page.click("#btn-plan");
-await page.waitForTimeout(1200);
-await shot("02-plan-cycle-go-nogo");
+await page.waitForTimeout(1500);
+await page.waitForSelector("#routes-tbody tr[data-route]");
+await shot("02-routes-overview-metrics");
 
-// Select a fighter and insert
-const fighter = page.locator('[data-aircraft="FTR-1"]');
-if (await fighter.count()) await fighter.click();
-await page.fill("#insert-id", "STK-SHOT");
-await page.click("#btn-insert-submit");
-await page.waitForTimeout(1200);
-await shot("03-dynamic-insert-reassess");
+// Select a strike-heavy route if present, else first
+const rows = page.locator("#routes-tbody tr[data-route]");
+await rows.first().click();
+await page.waitForTimeout(500);
+await shot("03-route-timeline-events");
 
-// Open help for IxDF panel
-await page.locator(".help").evaluate((el) => {
-  el.open = true;
-});
-await page.waitForTimeout(400);
-await shot("04-ixdf-help-panel");
+await page.click("#btn-more-details");
+await page.waitForTimeout(800);
+await page.waitForSelector("#details-drawer:not([hidden])");
+await shot("04-route-details-map-threats");
 
 await browser.close();
 console.log("done");
