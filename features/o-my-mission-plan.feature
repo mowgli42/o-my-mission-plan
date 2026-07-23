@@ -13,14 +13,16 @@ Feature: o-my Mission Planning
     Then each assigned group is given to a capable aircraft
     And any tasks that could not be allocated are explicitly reported
 
-  Scenario: Initial route respects proximity rules
+  Scenario: Initial route uses published waypoints that satisfy proximity
     Given an aircraft with one or more assigned tasks
     When the route generator builds an ordered route
     Then the route starts and ends at the aircraft’s home airbase
-    And the route uses commercial navaid identifiers as waypoints where appropriate
-    And the aircraft comes within 80 nmi of every assigned ISR task
-    And the aircraft comes within 20 nmi of every assigned strike task
-    And individual legs may be longer than the proximity distances as needed
+    And the route is a sequence of published waypoints only (airbases, commercial navaids, optional fixed mission waypoints)
+    And no runtime-invented proximity points (PROX-*) appear
+    And at least one published waypoint lies within 80 nmi of every assigned ISR task that can be satisfied
+    And at least one published waypoint lies within 20 nmi of every assigned strike task that can be satisfied
+    And tasks that cannot be satisfied by any published fix are explicitly reported
+    And individual legs are great-circle between consecutive published waypoints (any length)
 
   Scenario: Fuel feasibility check via Route Propagation Service
     Given an aircraft with an initial route and starting fuel

@@ -58,3 +58,15 @@ def test_ui_served():
     r = client.get("/")
     assert r.status_code == 200
     assert "o-my Mission Plan" in r.text
+
+
+def test_plan_routes_use_published_waypoints_only():
+    r = client.post("/api/plan")
+    assert r.status_code == 200
+    for plan in r.json()["plans"]:
+        route = plan.get("route")
+        if not route:
+            continue
+        for wp in route["waypoints"]:
+            assert not wp["id"].startswith("PROX-")
+            assert wp["kind"] in ("airbase", "navaid", "mission")

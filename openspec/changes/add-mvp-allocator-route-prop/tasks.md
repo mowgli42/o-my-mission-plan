@@ -14,10 +14,11 @@
 - [x] Always return both allocations **and** the list of unallocated tasks
 
 ## Phase 3 — Initial Route Generator
-- [x] Build ordered waypoint list (home → navaids / proximity points → home)
-- [x] Ensure aircraft comes within 80 nmi of each ISR task and within 20 nmi of each strike task
-- [x] Legs may be any length; navaids used where helpful
-- [x] Attach tasks to the appropriate points in the route
+- [x] Build ordered waypoint list (home → published fixes → home)
+- [x] Ensure at least one published waypoint is within 80 nmi of each ISR task and within 20 nmi of each strike task (or report unsatisfied)
+- [x] Legs may be any length; only airbases / navaids / fixed mission waypoints
+- [x] Attach satisfying task ids to the published waypoints that cover them
+- [x] No runtime-invented `PROX-*` / `task_proximity` points
 
 ## Phase 4 — Route Propagation Service
 - [x] FastAPI app with route create / get / propagate endpoints

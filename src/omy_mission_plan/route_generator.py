@@ -1,13 +1,17 @@
-"""Proximity-based initial route generator using commercial navaids.
+"""Initial route generator using published waypoints only.
 
-The route must bring the aircraft within:
-- 80 nmi of each ISR task
-- 20 nmi of each strike task
+Routes are sequences of fixes from the navigation database (airbases,
+commercial navaids, and optional fixed mission waypoints). Proximity
+(80 nmi ISR / 20 nmi strike) is a post-selection success criterion —
+the generator never invents lat/lon points at planning time.
 
-Legs may be any length. Routes start and end at the home airbase.
+See docs/ROUTE-GENERATION.md.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
 
 from .geo import haversine_nmi
 from .models import (
@@ -25,105 +29,111 @@ from .models import (
 ISR_PROXIMITY_NMI = 80.0
 STRIKE_PROXIMITY_NMI = 20.0
 
+# Waypoint kinds allowed in a generated route (published set only).
+PUBLISHED_KINDS = frozenset({"airbase", "navaid", "mission"})
+
+
+@dataclass(frozen=True)
+class PublishedFix:
+    """A fix from the navigation database (never invented at runtime)."""
+
+    id: str
+    name: str
+    location: LatLon
+    kind: str  # "airbase" | "navaid" | "mission"
+
 
 def proximity_for(task: Task) -> float:
     return ISR_PROXIMITY_NMI if task.type == TaskType.ISR else STRIKE_PROXIMITY_NMI
 
 
-def _nearest_navaid(location: LatLon, navaids: dict[str, Navaid]) -> Navaid:
-    return min(navaids.values(), key=lambda n: haversine_nmi(location, n.location))
-
-
-def _task_approach_point(task: Task, from_loc: LatLon) -> LatLon:
-    """
-    Point on the great-circle toward the task that lands just inside the
-    required proximity radius (or the task itself if already closer).
-    """
-    dist = haversine_nmi(from_loc, task.location)
-    radius = proximity_for(task)
-    if dist <= radius:
-        # Already within proximity — use a point slightly offset toward task
-        # so the waypoint still "satisfies" the task visually.
-        return LatLon(lat=task.location.lat, lon=task.location.lon)
-
-    # Fraction of the way from task back toward from_loc so we stop at radius.
-    # We want a point `radius` nmi from the task along the from→task line,
-    # i.e. (dist - radius) / dist of the way from from_loc to task.
-    frac = (dist - radius * 0.9) / dist
-    return LatLon(
-        lat=from_loc.lat + frac * (task.location.lat - from_loc.lat),
-        lon=from_loc.lon + frac * (task.location.lon - from_loc.lon),
-    )
+def build_published_set(
+    airbases: dict[str, Airbase],
+    navaids: dict[str, Navaid],
+    mission_waypoints: Optional[dict[str, PublishedFix]] = None,
+) -> dict[str, PublishedFix]:
+    """Merge airbases + navaids + optional fixed mission waypoints."""
+    published: dict[str, PublishedFix] = {}
+    for base in airbases.values():
+        published[base.id] = PublishedFix(
+            id=base.id,
+            name=base.name,
+            location=base.location,
+            kind="airbase",
+        )
+    for nav in navaids.values():
+        published[nav.id] = PublishedFix(
+            id=nav.id,
+            name=nav.name,
+            location=nav.location,
+            kind="navaid",
+        )
+    if mission_waypoints:
+        for fix in mission_waypoints.values():
+            if fix.kind not in PUBLISHED_KINDS:
+                raise ValueError(f"Invalid mission waypoint kind: {fix.kind}")
+            published[fix.id] = fix
+    return published
 
 
 def _nearest_unvisited(current: LatLon, remaining: list[Task]) -> Task:
     return min(remaining, key=lambda t: haversine_nmi(current, t.location))
 
 
-def generate_route(
-    aircraft: Aircraft,
-    tasks: list[Task],
-    home: Airbase,
-    navaids: dict[str, Navaid],
-) -> Route:
-    """Build home → (navaids / proximity points) → home for assigned tasks."""
-    home_wp = Waypoint(
-        id=f"HOME-{home.id}",
-        location=home.location,
-        kind="airbase",
-        name=home.name,
+def _waypoint_satisfies(wp: Waypoint, task: Task) -> bool:
+    return haversine_nmi(wp.location, task.location) <= proximity_for(task)
+
+
+def _find_satisfying_fix(
+    task: Task,
+    published: dict[str, PublishedFix],
+    current: LatLon,
+) -> Optional[PublishedFix]:
+    """Nearest published fix (to current position) that lies within the task radius."""
+    radius = proximity_for(task)
+    candidates = [
+        fix
+        for fix in published.values()
+        if haversine_nmi(fix.location, task.location) <= radius
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda f: haversine_nmi(current, f.location))
+
+
+def _append_fix(
+    waypoints: list[Waypoint],
+    fix: PublishedFix,
+    task_id: Optional[str] = None,
+) -> None:
+    """Append a published fix unless it is already the last waypoint."""
+    if waypoints and waypoints[-1].id == fix.id:
+        if task_id and not waypoints[-1].associated_task_id:
+            waypoints[-1].associated_task_id = task_id
+        return
+    waypoints.append(
+        Waypoint(
+            id=fix.id,
+            location=fix.location,
+            kind=fix.kind,
+            name=fix.name,
+            associated_task_id=task_id,
+        )
     )
 
-    waypoints: list[Waypoint] = [home_wp]
-    current = home.location
-    remaining = list(tasks)
-    assigned_ids = [t.id for t in tasks]
 
-    while remaining:
-        task = _nearest_unvisited(current, remaining)
-        remaining.remove(task)
+def _compact(waypoints: list[Waypoint]) -> list[Waypoint]:
+    compacted: list[Waypoint] = []
+    for wp in waypoints:
+        if compacted and compacted[-1].id == wp.id:
+            if wp.associated_task_id and not compacted[-1].associated_task_id:
+                compacted[-1].associated_task_id = wp.associated_task_id
+            continue
+        compacted.append(wp)
+    return compacted
 
-        # Insert a helpful navaid if it shortens the path meaningfully
-        # and is not already the current point.
-        navaid = _nearest_navaid(task.location, navaids)
-        navaid_dist = haversine_nmi(current, navaid.location)
-        direct = haversine_nmi(current, task.location)
-        if (
-            navaid_dist > 5.0
-            and haversine_nmi(navaid.location, task.location) < direct
-            and (not waypoints or waypoints[-1].id != navaid.id)
-        ):
-            nav_wp = Waypoint(
-                id=navaid.id,
-                location=navaid.location,
-                kind="navaid",
-                name=navaid.name,
-            )
-            waypoints.append(nav_wp)
-            current = navaid.location
 
-        approach = _task_approach_point(task, current)
-        task_wp = Waypoint(
-            id=f"PROX-{task.id}",
-            location=approach,
-            kind="task_proximity",
-            name=task.label or task.id,
-            associated_task_id=task.id,
-        )
-        waypoints.append(task_wp)
-        current = approach
-
-    # Return home
-    if waypoints[-1].id != home_wp.id:
-        waypoints.append(
-            Waypoint(
-                id=f"HOME-RTN-{home.id}",
-                location=home.location,
-                kind="airbase",
-                name=home.name,
-            )
-        )
-
+def _build_legs(waypoints: list[Waypoint]) -> tuple[list[Leg], float]:
     legs: list[Leg] = []
     total = 0.0
     for i in range(len(waypoints) - 1):
@@ -136,26 +146,101 @@ def generate_route(
             )
         )
         total += d
+    return legs, total
+
+
+def generate_route(
+    aircraft: Aircraft,
+    tasks: list[Task],
+    home: Airbase,
+    navaids: dict[str, Navaid],
+    airbases: Optional[dict[str, Airbase]] = None,
+    mission_waypoints: Optional[dict[str, PublishedFix]] = None,
+) -> Route:
+    """
+    Build home → published fixes → home for assigned tasks.
+
+    Only airbases, commercial navaids, and fixed mission waypoints appear.
+    Tasks that cannot be covered by any published fix are listed on the
+    route as ``unsatisfied_task_ids``.
+    """
+    bases = airbases if airbases is not None else {home.id: home}
+    published = build_published_set(bases, navaids, mission_waypoints)
+    published[home.id] = PublishedFix(
+        id=home.id,
+        name=home.name,
+        location=home.location,
+        kind="airbase",
+    )
+
+    waypoints: list[Waypoint] = [
+        Waypoint(
+            id=home.id,
+            location=home.location,
+            kind="airbase",
+            name=home.name,
+        )
+    ]
+    current = home.location
+    assigned_ids = [t.id for t in tasks]
+    unsatisfied: list[str] = []
+    remaining = list(tasks)
+
+    while remaining:
+        task = _nearest_unvisited(current, remaining)
+        remaining.remove(task)
+
+        covering = next((wp for wp in waypoints if _waypoint_satisfies(wp, task)), None)
+        if covering is not None:
+            if not covering.associated_task_id:
+                covering.associated_task_id = task.id
+            continue
+
+        chosen = _find_satisfying_fix(task, published, current)
+        if chosen is None:
+            unsatisfied.append(task.id)
+            continue
+
+        _append_fix(waypoints, chosen, task_id=task.id)
+        current = chosen.location
+
+    if waypoints[-1].id != home.id:
+        waypoints.append(
+            Waypoint(
+                id=home.id,
+                location=home.location,
+                kind="airbase",
+                name=home.name,
+            )
+        )
+
+    waypoints = _compact(waypoints)
+    legs, total = _build_legs(waypoints)
 
     return Route(
         aircraft_id=aircraft.id,
         waypoints=waypoints,
         legs=legs,
         assigned_task_ids=assigned_ids,
+        unsatisfied_task_ids=unsatisfied,
         total_distance_nmi=round(total, 2),
     )
 
 
 def route_satisfies_proximity(route: Route, tasks: list[Task]) -> bool:
-    """Verify every task has a waypoint within its proximity radius."""
+    """Verify every assigned task has a published waypoint within radius."""
     by_id = {t.id: t for t in tasks}
     for tid in route.assigned_task_ids:
         task = by_id[tid]
-        radius = proximity_for(task)
-        ok = any(
-            haversine_nmi(wp.location, task.location) <= radius
-            for wp in route.waypoints
-        )
-        if not ok:
+        if not any(_waypoint_satisfies(wp, task) for wp in route.waypoints):
             return False
     return True
+
+
+def assert_published_only(route: Route) -> None:
+    """Raise if any waypoint is not from the published kind set."""
+    for wp in route.waypoints:
+        if wp.kind not in PUBLISHED_KINDS:
+            raise AssertionError(f"Non-published waypoint kind: {wp.kind} id={wp.id}")
+        if wp.id.startswith("PROX-") or wp.kind == "task_proximity":
+            raise AssertionError(f"Invented proximity waypoint: {wp.id}")

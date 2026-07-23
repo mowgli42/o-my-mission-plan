@@ -7,7 +7,7 @@ Enable iterative “guess-and-see” mission planning cycles for the o-my OMS ec
 The system:
 - Accepts (or simulates) a set of unassigned ISR/collection and strike tasks (proxy for ATO ingestion).
 - Allocates groups of tasks in a geographic region to suitable aircraft resources (ISR, fighter, or bomber) that have an assigned takeoff/landing airbase.
-- Generates an initial route for each assigned aircraft that starts and ends at its home airbase and uses commercial navaid points. The route only needs to bring the aircraft **within** the required proximity of each task (80 nmi for ISR/collection, 20 nmi for strike). Individual legs may be longer as needed.
+- Generates an initial route for each assigned aircraft that starts and ends at its home airbase and is a sequence of **published waypoints** (airbases, commercial navaids, optional fixed mission waypoints). Proximity (80 nmi ISR / 20 nmi strike) is validated against those published fixes; the system does not invent lat/lon points at planning time.
 - Provides a Route Propagation Service that tracks fuel remaining and burn rate for each leg and answers whether the platform can safely complete the remaining route (including fixed reserves).
 - Supports insertion of a newly identified task during execution by **fully re-assessing / regenerating** the route and re-propagating fuel state.
 - Surfaces clear feedback when tasks remain unallocated or when a route is unexecutable due to fuel reserve constraints.
@@ -57,10 +57,14 @@ The system SHALL provide a simple allocator that:
 
 Given an aircraft and its assigned tasks, the system SHALL generate an ordered route that:
 - Starts at the aircraft’s home airbase
-- Uses commercial navaid points as intermediate waypoints where helpful
-- Brings the aircraft **within 80 nmi** of each ISR/collection task and **within 20 nmi** of each strike task
+- Consists **only** of published waypoints from the navigation database (airbases, commercial navaids, and optional fixed mission waypoints)
+- Does **not** invent runtime lat/lon points (no `PROX-*` / `task_proximity` waypoints)
+- Is validated so that at least one published waypoint on the route lies **within 80 nmi** of each ISR/collection task and **within 20 nmi** of each strike task when the published set allows
+- Explicitly reports assigned tasks that cannot be satisfied by any published fix
 - Ends at the aircraft’s home airbase
-- Individual legs may be of any length required to satisfy the proximity rules and connectivity
+- Uses great-circle legs of any length between consecutive published waypoints
+
+See `docs/ROUTE-GENERATION.md`.
 
 ### R5 — Route Propagation Service (Fuel & Feasibility)
 
@@ -79,6 +83,7 @@ During a live route, the system SHALL accept a newly identified task, **fully re
 
 The system SHALL provide explicit feedback for:
 - Tasks that could not be allocated
+- Assigned tasks that cannot be satisfied by any published waypoint within the required proximity
 - Routes that are unexecutable because they would violate the fuel reserve constraint
 
 ### R8 — UCI-Oriented Contracts

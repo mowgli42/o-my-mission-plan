@@ -56,10 +56,10 @@ class Aircraft(BaseModel):
 
 
 class Waypoint(BaseModel):
-    """A point on a route — airbase, navaid, or task proximity point."""
+    """A published fix on a route — airbase, navaid, or fixed mission waypoint."""
     id: str
     location: LatLon
-    kind: str  # "airbase" | "navaid" | "task_proximity"
+    kind: str  # "airbase" | "navaid" | "mission"
     name: Optional[str] = None
     associated_task_id: Optional[str] = None  # set when this waypoint satisfies a task
 
@@ -77,6 +77,7 @@ class Route(BaseModel):
     waypoints: list[Waypoint]
     legs: list[Leg] = []
     assigned_task_ids: list[str] = []
+    unsatisfied_task_ids: list[str] = []  # assigned but no published fix within proximity
     total_distance_nmi: float = 0.0
     feasible: Optional[bool] = None  # set by propagator
     infeasible_reason: Optional[str] = None

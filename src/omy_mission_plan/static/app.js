@@ -125,12 +125,16 @@ function renderFleet() {
           ? Math.max(0, Math.min(100, (plan.fuel.final_fuel / a.initial_fuel) * 100))
           : null;
       const low = plan?.fuel && !plan.fuel.feasible;
+      const unsat = (plan?.unsatisfied_task_ids || []).length
+        ? `<div class="reason" role="status">Unsatisfied (no published fix in range): ${(plan.unsatisfied_task_ids || []).join(", ")}</div>`
+        : "";
       const reason =
         plan?.route?.infeasible_reason || plan?.fuel?.infeasible_reason
           ? `<div class="reason" role="alert">${plan.route?.infeasible_reason || plan.fuel.infeasible_reason}</div>`
           : "";
       const tasks = (plan?.assigned_task_ids || []).join(", ") || "none";
       const dist = plan?.route ? `${plan.route.total_distance_nmi} nmi` : "—";
+      const wps = plan?.route?.waypoints?.map((w) => w.id).join(" → ") || "";
       return `
         <article class="item ${selected}" data-aircraft="${a.id}" tabindex="0" role="button" aria-pressed="${selected ? "true" : "false"}">
           <div class="item-row">
@@ -139,12 +143,14 @@ function renderFleet() {
           </div>
           <div class="item-meta">${typeBadge(a.type)} · home ${a.home_base_id} · tasks ${tasks}</div>
           <div class="item-meta">Route ${dist} · burn ${a.burn_rate_per_nmi}/nmi · reserve ${a.reserve_fuel}</div>
+          ${wps ? `<div class="item-meta">Fixes ${wps}</div>` : ""}
           ${
             fuelPct != null
               ? `<div class="fuel-bar ${low ? "low" : ""}" title="Final fuel ${plan.fuel.final_fuel}"><span style="width:${fuelPct}%"></span></div>
                  <div class="item-meta">Final fuel ${plan.fuel.final_fuel} / ${a.initial_fuel}</div>`
               : ""
           }
+          ${unsat}
           ${reason}
         </article>`;
     })

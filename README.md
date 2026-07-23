@@ -6,9 +6,10 @@ Functional prototype for iterative “guess-and-see” mission planning cycles:
 
 - Simulate ATO ingestion → pool of unassigned collection (ISR) and strike tasks
 - Simple task allocation: group tasks by region and assign to suitable aircraft (ISR / fighter / bomber) that have a home airbase
-- Initial route generator that builds legs using **commercial navaid points**
-  - within **80 nmi** of ISR / collection tasks
+- Initial route generator that sequences **published waypoints** (airbases + commercial navaids)
+  - proximity success criteria: within **80 nmi** of ISR / collection tasks
   - within **20 nmi** of strike tasks
+  - never invents runtime `PROX-*` lat/lon points (see [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md))
 - FastAPI **Route Propagation Service** that tracks fuel remaining and burn rate per leg so the platform can safely complete the route
 - Dark-theme planning console guided by **IxDF / Nielsen usability heuristics**
 - Designed so external suppliers can later implement richer services and talk to this core via **UCI messages**
@@ -25,7 +26,7 @@ Functional prototype for iterative “guess-and-see” mission planning cycles:
 | Beads epic + phased issues | Done |
 | Mock ATO → unassigned task pool | Done |
 | Simple regional task allocator | Done |
-| Initial route generator (navaids + proximity) | Done |
+| Initial route generator (published waypoints + proximity check) | Done |
 | Route Propagation Service (FastAPI + fuel/burn) | Done |
 | Dynamic task insertion + re-propagation | Done |
 | Demo world (Central/East Florida navaids + airbases) | Done |
@@ -56,7 +57,7 @@ Keyboard shortcuts in the UI: **P** run plan · **I** insert strike · **R** res
 | `models.py` | Aircraft, Task, Route, FuelState, AllocationResult, … |
 | `demo_world.py` | 2 ISR + 3 fighters + 2 bombers, 5 ISR + 3 strike tasks, Florida airbases/navaids |
 | `allocator.py` | Regional grouping + type-capable assignment; always returns unallocated ids |
-| `route_generator.py` | Home → navaids / proximity points → home |
+| `route_generator.py` | Home → published fixes → home (proximity validated; no PROX-*) |
 | `propagator.py` | Constant burn + fixed reserve → GO / NO-GO |
 | `planning.py` | Full plan cycle + dynamic insert (full re-generate + re-propagate) |
 | `app.py` | FastAPI service + static UI |

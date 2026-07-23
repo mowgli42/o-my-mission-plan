@@ -27,6 +27,7 @@ class PlannedAircraft(BaseModel):
     aircraft_type: str
     home_base_id: str
     assigned_task_ids: list[str]
+    unsatisfied_task_ids: list[str] = Field(default_factory=list)
     route: Optional[Route] = None
     fuel: Optional[FuelState] = None
     status: str  # "idle" | "GO" | "NO-GO"
@@ -97,7 +98,9 @@ class PlanningSession:
                 continue
 
             home = self.airbases[ac.home_base_id]
-            route = generate_route(ac, assigned, home, self.navaids)
+            route = generate_route(
+                ac, assigned, home, self.navaids, airbases=self.airbases
+            )
             route, fuel = propagate(route, ac)
             self.routes[ac.id] = route
             self.fuel[ac.id] = fuel
@@ -108,6 +111,7 @@ class PlanningSession:
                     aircraft_type=ac.type.value,
                     home_base_id=ac.home_base_id,
                     assigned_task_ids=tids,
+                    unsatisfied_task_ids=list(route.unsatisfied_task_ids),
                     route=route,
                     fuel=fuel,
                     status="GO" if fuel.feasible else "NO-GO",
@@ -153,7 +157,9 @@ class PlanningSession:
         ac = aircraft_by_id(self.aircraft, aircraft_id)
         assigned = [self.task_index[tid] for tid in tids]
         home = self.airbases[ac.home_base_id]
-        route = generate_route(ac, assigned, home, self.navaids)
+        route = generate_route(
+            ac, assigned, home, self.navaids, airbases=self.airbases
+        )
         route, fuel = propagate(route, ac)
         self.routes[aircraft_id] = route
         self.fuel[aircraft_id] = fuel
@@ -164,6 +170,7 @@ class PlanningSession:
             aircraft_type=ac.type.value,
             home_base_id=ac.home_base_id,
             assigned_task_ids=tids,
+            unsatisfied_task_ids=list(route.unsatisfied_task_ids),
             route=route,
             fuel=fuel,
             status="GO" if fuel.feasible else "NO-GO",

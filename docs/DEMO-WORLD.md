@@ -46,12 +46,15 @@ Approximately:
 
 ## Route construction rules
 
-- The generated route must bring the aircraft **within 80 nmi** of every assigned ISR task and **within 20 nmi** of every assigned strike task.
-- Legs may be of any length required to satisfy connectivity and the proximity constraints.
-- Commercial navaids are used as intermediate waypoints where helpful.
+- The generated route is a sequence of **published waypoints only** (airbases, commercial navaids, optional fixed mission waypoints). See [`ROUTE-GENERATION.md`](ROUTE-GENERATION.md).
+- After selection, validate that at least one published waypoint lies **within 80 nmi** of every assigned ISR task and **within 20 nmi** of every assigned strike task.
+- Do **not** invent intermediate lat/lon points (`PROX-*`) at planning time.
+- Legs are great-circle between consecutive published waypoints (any length).
 - Every route starts and ends at the aircraft’s assigned home airbase.
+- Assigned tasks that no published fix can cover are reported as unsatisfied.
 
 ## Feedback that must be visible
 
 - List of tasks that remain unallocated after the allocation step.
+- List of assigned tasks that no published waypoint can satisfy (proximity).
 - GO / NO-GO for each route based on whether end-of-route fuel meets the fixed reserve.

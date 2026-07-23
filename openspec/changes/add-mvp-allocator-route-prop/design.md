@@ -13,13 +13,19 @@ Aircraft inventory (fixed for demo):
 
 Task pool (first cycle): ≈4–5 ISR + 2–3 strike.
 
-### 2. Proximity, not fixed leg length
+### 2. Published waypoints only; proximity is a success criterion
 
-The route only needs to get the aircraft **within**:
+The route is a sequence of **published** fixes from the navigation database
+(airbases, commercial navaids, optional fixed mission waypoints). The planner
+does **not** invent lat/lon points at runtime.
+
+A task is satisfied if **at least one published waypoint already on the route**
+lies within:
 - 80 nmi of an ISR / collection task
 - 20 nmi of a strike task
 
-Individual legs may be as long as needed to connect home base → navaids → task proximity points → home. This is simpler and more realistic than forcing every leg to be exactly 80/20 nmi.
+Individual legs are great-circle between consecutive published fixes and may
+be any length. See `docs/ROUTE-GENERATION.md`.
 
 ### 3. Route Propagation is the only “live” service
 
