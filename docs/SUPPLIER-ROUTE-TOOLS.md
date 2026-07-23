@@ -101,16 +101,16 @@ Regardless of supplier:
 
 This preserves the original design principle: external suppliers own sophisticated planning; we own feasibility, feedback, and the live route state.
 
-## Implementation phases (suggested)
+## Implementation status
 
-| Phase | Work |
-|-------|------|
-| 0 | Finish published-waypoint-only generator (issue #2) — becomes the reliable fallback. |
-| 1 | Define `SupplierRouteRequest` / `SupplierRouteResponse` Pydantic models and a no-op / fallback adapter. |
-| 2 | Spike openRouteFinder (or RouteFinderLib) in a branch; measure coverage on the Florida demo set. |
-| 3 | Wire the adapter into `planning.py` behind a feature flag / config (`ROUTE_SUPPLIER=fallback|openroutefinder`). |
-| 4 | Document the UCI-oriented contract so a real external supplier can replace the adapter. |
-| 5 | Prototype cost-grid supplier (networkx + avoid polygons) or OpenAP-TOP trajectory → waypoint reduction. |
+| Phase | Work | Status |
+|-------|------|--------|
+| 0 | Published-waypoint-only generator (issue #2) | Done |
+| 1 | `SupplierRouteRequest` / `SupplierRouteResponse` + fallback adapter | Done |
+| 2 | openRouteFinder-style spike on PSAB published graph | Done — see `docs/ORF-SPIKE.md` |
+| 3 | Wire adapter into `planning.py` (`ROUTE_SUPPLIER=…`) | Done |
+| 4 | UCI-oriented contracts + integration guide | Done |
+| 5 | Cost-grid avoid-zone supplier (pure-Python Dijkstra) | Done (`ROUTE_SUPPLIER=costgrid`) |
 
 ## Non-goals for the first supplier integration
 
@@ -125,4 +125,4 @@ This preserves the original design principle: external suppliers own sophisticat
 - openRouteFinder — https://github.com/gtxzsxxk/openRouteFinder (and FSUnion forks).  
 - OpenAP / trajectory tools — mode-s.org / OpenAP ecosystem.  
 - BlueSky — https://github.com/TUDelft-CNS-ATM/bluesky  
-- Internal: `docs/ROUTE-GENERATION.md` (published waypoints only).  
+- Internal: `docs/ROUTE-GENERATION.md`, `docs/ORF-SPIKE.md`, `docs/CONOPS.md`.  

@@ -18,6 +18,7 @@ from .options import (
     create_option_from_session,
     ensure_top_three,
     rerun_option,
+    resolve_export_option_id,
 )
 from .planning import PlanningSession, make_demo_insert_task
 from .propagator import propagate
@@ -188,17 +189,17 @@ def export_routes(body: Optional[ExportRequest] = None):
     """
     Export final planned routes for o-my-sim.
 
-    Prefer exporting from a chosen Mission Option (`option_id`) after CONOPS
-    comparison. Writes `data/routes/<scenario>-routes-latest.json` by default.
+    Uses ``option_id`` when provided; otherwise the planner's preferred
+    Mission Option; otherwise the latest session plan.
     """
     req = body or ExportRequest()
     plan = None
-    if req.option_id:
-        opt = OPTION_STORE.get(req.option_id)
-        if opt is None:
-            raise HTTPException(status_code=404, detail=f"Unknown option: {req.option_id}")
-        plan = opt.result
-    elif session.latest is None:
+    resolved_id = None
+    try:
+        resolved_id, plan = resolve_export_option_id(req.option_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown option: {exc}") from exc
+    if plan is None and session.latest is None:
         raise HTTPException(status_code=404, detail="No plan yet — POST /api/plan first")
     try:
         bundle = session.export_routes_for_sim(
@@ -207,8 +208,16 @@ def export_routes(body: Optional[ExportRequest] = None):
             write=req.write,
             plan=plan,
         )
-        if req.option_id:
-            bundle = {**bundle, "option_id": req.option_id}
+        if resolved_id:
+            bundle = {
+                **bundle,
+                "option_id": resolved_id,
+                "export_source": "preferred_option"
+                if not req.option_id
+                else "explicit_option",
+            }
+        else:
+            bundle = {**bundle, "export_source": "session_latest"}
         return bundle
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -218,18 +227,24 @@ def export_routes(body: Optional[ExportRequest] = None):
 def get_exported_routes(include_nogo: bool = False, option_id: Optional[str] = None):
     """Return the export bundle without requiring a prior write (does not write)."""
     plan = None
-    if option_id:
-        opt = OPTION_STORE.get(option_id)
-        if opt is None:
-            raise HTTPException(status_code=404, detail=f"Unknown option: {option_id}")
-        plan = opt.result
-    elif session.latest is None:
+    resolved_id = None
+    try:
+        resolved_id, plan = resolve_export_option_id(option_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown option: {exc}") from exc
+    if plan is None and session.latest is None:
         raise HTTPException(status_code=404, detail="No plan yet — POST /api/plan first")
     bundle = session.export_routes_for_sim(
         include_nogo=include_nogo, write=False, plan=plan
     )
-    if option_id:
-        bundle = {**bundle, "option_id": option_id}
+    if resolved_id:
+        bundle = {
+            **bundle,
+            "option_id": resolved_id,
+            "export_source": "preferred_option" if not option_id else "explicit_option",
+        }
+    else:
+        bundle = {**bundle, "export_source": "session_latest"}
     return bundle
 
 
@@ -281,9 +296,11 @@ def create_option(body: CreateOptionRequest):
 
 
 @app.post("/api/options/top-three")
-def create_top_three(force: bool = False):
+def create_top_three(force: bool = False, supplier_id: Optional[str] = None):
     """Ensure slots A/B/C hold Efficient / Synchronized / Unexpected-axis options."""
-    created = ensure_top_three(session, force=force)
+    created = ensure_top_three(
+        session, force=force, supplier_id=supplier_id or None
+    )
     return {
         "created": [o.to_list_item() for o in created],
         "slots": OPTION_STORE.slot_map(),

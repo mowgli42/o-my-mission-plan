@@ -27,21 +27,34 @@ await page.waitForSelector(".brand-mark");
 await page.waitForTimeout(700);
 await shot("01-plan-psab-world");
 
-await page.click("#btn-plan");
-await page.waitForTimeout(1500);
-await page.waitForSelector("#routes-tbody tr[data-route]");
-await shot("02-routes-overview-metrics");
+// CONOPS Options showcase
+await page.click("#tab-options");
+await page.waitForTimeout(400);
+await page.click("#btn-top-three");
+await page.waitForSelector(".option-card:not(.empty)");
+await page.waitForTimeout(1200);
+// Prefer slot A for export story
+const prefer = page.locator(".option-card .btn-prefer").first();
+if (await prefer.count()) {
+  await prefer.click();
+  await page.waitForTimeout(500);
+}
+await shot("02-options-top-three");
 
-// Select a strike-heavy route if present, else first
+await page.click("#tab-routes");
+await page.waitForTimeout(800);
+await page.waitForSelector("#routes-tbody tr[data-route]");
+await shot("03-routes-overview-metrics");
+
 const rows = page.locator("#routes-tbody tr[data-route]");
 await rows.first().click();
 await page.waitForTimeout(500);
-await shot("03-route-timeline-events");
+await shot("04-route-timeline-events");
 
 await page.click("#btn-more-details");
 await page.waitForTimeout(800);
 await page.waitForSelector("#details-drawer:not([hidden])");
-await shot("04-route-details-map-threats");
+await shot("05-route-details-map-threats");
 
 await browser.close();
 console.log("done");

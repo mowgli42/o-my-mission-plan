@@ -109,6 +109,7 @@ class PlanningSession:
             mission_waypoints=self.mission_waypoints,
             aircraft_by_id=ac_by_id,
             tasks_by_id=self.task_index,
+            threats=list(self.threats),
         )
 
     def snapshot(self) -> WorldSnapshot:

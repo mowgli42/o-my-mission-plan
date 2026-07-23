@@ -36,8 +36,9 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 | Dark-theme IxDF planning UI | Done |
 | Routes overview (battlespace table + debrief timeline) | Done |
 | Route details drawer (map + threats + tasks) | Done |
-| Pluggable route suppliers (`ROUTE_SUPPLIER`) | Done (fallback + ORF/costgrid adapters) |
+| Pluggable route suppliers (`ROUTE_SUPPLIER`) | Done (fallback + ORF graph spike + cost-grid avoids) |
 | CONOPS Mission Options A/B/C + compare / re-run | Done |
+| Options UI (top-three showcase) | Done |
 | Unit / API tests | Done (`make test`) |
 
 ---
@@ -108,6 +109,7 @@ Set `ROUTE_SUPPLIER=fallback|openroutefinder|costgrid` to select the lateral pat
 
 - [`docs/CONOPS.md`](docs/CONOPS.md) — iterative cycle + top-three Mission Options
 - [`docs/SUPPLIER-ROUTE-TOOLS.md`](docs/SUPPLIER-ROUTE-TOOLS.md) — supplier tool survey + adapter model
+- [`docs/ORF-SPIKE.md`](docs/ORF-SPIKE.md) — openRouteFinder-style PSAB graph spike (#6)
 - [`docs/INTEGRATION-GUIDE.md`](docs/INTEGRATION-GUIDE.md) — wiring suppliers and options
 - [`docs/CIVIL-ROUTE-DEV-GUIDE.md`](docs/CIVIL-ROUTE-DEV-GUIDE.md) — civil / Dijkstra path
 - [`docs/MISSION-ROUTE-DEV-GUIDE.md`](docs/MISSION-ROUTE-DEV-GUIDE.md) — mission constraints for B/C
@@ -115,13 +117,14 @@ Set `ROUTE_SUPPLIER=fallback|openroutefinder|costgrid` to select the lateral pat
 - [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md) — published-waypoint-only design
 - [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — export contract for o-my-sim
 - [`docs/examples/gulf-war-psab-001-routes-example.json`](docs/examples/gulf-war-psab-001-routes-example.json) — sample bundle
+- [`docs/screenshots/`](docs/screenshots/) — Plan / Options / Routes UI captures
 
 ### UI (IxDF principles)
 
 Dark ops console aligned with **o-my-debrief** (timeline / key events) and
 **battlespace-manager** (route table, threat bands, map + segment timeline).
-Plan tab for guess-and-see cycles; Routes tab for fleet overview metrics and
-per-route inspection; More details for map / threats / task breakout.
+**Options** tab showcases the CONOPS top-three working set; Plan for guess-and-see;
+Routes for fleet overview; More details for map / threats / task breakout.
 
 ---
 
@@ -131,19 +134,23 @@ per-route inspection; More details for map / threats / task breakout.
 
 ![Plan PSAB world](docs/screenshots/01-plan-psab-world.png)
 
-### 2. Routes overview — metrics + battlespace-style route list
+### 2. Options tab — CONOPS top-three (Efficient / Synchronized / Unexpected-axis)
 
-Top-line metrics: aircraft count, assigned ISR/strike breakout, skipped tasks, weapons utilized.
+Build A/B/C, compare GO / distance / sync timing, prefer one for export.
 
-![Routes overview](docs/screenshots/02-routes-overview-metrics.png)
+![Options top-three](docs/screenshots/02-options-top-three.png)
 
-### 3. Route timeline / key events (o-my-debrief alignment)
+### 3. Routes overview — metrics + battlespace-style route list
 
-![Route timeline](docs/screenshots/03-route-timeline-events.png)
+![Routes overview](docs/screenshots/03-routes-overview-metrics.png)
 
-### 4. More details — map, threats, task breakout (battlespace-manager layout)
+### 4. Route timeline / key events (o-my-debrief alignment)
 
-![Route details](docs/screenshots/04-route-details-map-threats.png)
+![Route timeline](docs/screenshots/04-route-timeline-events.png)
+
+### 5. More details — map, threats, task breakout
+
+![Route details](docs/screenshots/05-route-details-map-threats.png)
 
 
 ---

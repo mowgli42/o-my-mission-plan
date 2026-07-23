@@ -20,6 +20,8 @@ VALID_EMPHASES = frozenset(
     {EMPHASIS_EFFICIENT, EMPHASIS_SYNCHRONIZED, EMPHASIS_UNEXPECTED_AXIS}
 )
 VALID_SLOTS = frozenset({"A", "B", "C"})
+# Nominal cruise for timing indicators (not a physics model)
+NOMINAL_CRUISE_KT = 420.0
 
 DEFAULT_EMPHASIS_BY_SLOT = {
     "A": EMPHASIS_EFFICIENT,
@@ -35,6 +37,121 @@ DEFAULT_AXIS_PROFILES: dict[str, list[str]] = {
     # Western desert corridor
     "western": ["MW-WADI-AL-BATIN", "MW-MUTLA"],
 }
+
+
+def compute_sync_timing(
+    result: PlanCycleResult,
+    router_inputs: dict[str, Any],
+    *,
+    cruise_kt: float = NOMINAL_CRUISE_KT,
+) -> dict[str, Any]:
+    """
+    Derive simple timing-alignment indicators for synchronized options.
+
+    Not a multi-vehicle optimizer — advisory metrics from route geometry +
+    saved BDA lag intent (docs/CONOPS.md).
+    """
+    bda_lag = float(router_inputs.get("bda_lag_minutes") or 30.0)
+    sync_group = router_inputs.get("sync_group") or "wave-1"
+
+    strike_tots: list[float] = []
+    isr_etas: list[float] = []
+    strike_platforms = 0
+    isr_platforms = 0
+
+    for plan in result.plans:
+        if plan.status not in {"GO", "NO-GO"} or not plan.route:
+            continue
+        route = plan.route
+        # Cumulative time to each waypoint
+        times: list[float] = [0.0]
+        for leg in route.legs:
+            times.append(times[-1] + (leg.distance_nmi / cruise_kt) * 60.0)
+
+        has_strike = False
+        has_isr = False
+        for i, wp in enumerate(route.waypoints):
+            tid = wp.associated_task_id
+            if not tid:
+                continue
+            # Infer type from task id prefix used in demo / insert
+            if tid.startswith("STK") or "STRIKE" in tid.upper():
+                has_strike = True
+                if i < len(times):
+                    strike_tots.append(times[i])
+            elif tid.startswith("ISR"):
+                has_isr = True
+                if i < len(times):
+                    isr_etas.append(times[i])
+        # Fallback: aircraft type
+        if plan.aircraft_type in {"FIGHTER", "BOMBER"} and plan.assigned_task_ids:
+            if not has_strike and any(
+                t.startswith("STK") for t in plan.assigned_task_ids
+            ):
+                has_strike = True
+                # Use mid-route as crude TOT if association missing
+                mid = len(times) // 2
+                strike_tots.append(times[mid] if times else 0.0)
+            strike_platforms += 1 if has_strike or plan.aircraft_type in {
+                "FIGHTER",
+                "BOMBER",
+            } and any(t.startswith("STK") for t in plan.assigned_task_ids) else 0
+        if plan.aircraft_type == "ISR" and plan.assigned_task_ids:
+            isr_platforms += 1
+            if not has_isr and times:
+                isr_etas.append(times[-1] * 0.7)
+
+    # Recount platforms cleanly
+    strike_platforms = sum(
+        1
+        for p in result.plans
+        if p.status in {"GO", "NO-GO"}
+        and p.aircraft_type in {"FIGHTER", "BOMBER"}
+        and any(t.startswith("STK") for t in (p.assigned_task_ids or []))
+    )
+    isr_platforms = sum(
+        1
+        for p in result.plans
+        if p.status in {"GO", "NO-GO"}
+        and p.aircraft_type == "ISR"
+        and (p.assigned_task_ids or [])
+    )
+
+    tot_spread = (
+        round(max(strike_tots) - min(strike_tots), 1) if len(strike_tots) >= 2 else 0.0
+    )
+    mean_tot = round(sum(strike_tots) / len(strike_tots), 1) if strike_tots else None
+    # Alignment: good if strike TOTs cluster within 15 min
+    if len(strike_tots) < 2:
+        alignment = "single-platform" if strike_tots else "no-strike-tot"
+        alignment_ok = True
+    else:
+        alignment_ok = tot_spread <= 15.0
+        alignment = "aligned" if alignment_ok else "spread"
+
+    bda_ok = None
+    bda_slack_min = None
+    if mean_tot is not None and isr_etas:
+        # ISR should arrive at/after mean strike TOT + BDA lag
+        earliest_isr = min(isr_etas)
+        required = mean_tot + bda_lag
+        bda_slack_min = round(earliest_isr - required, 1)
+        bda_ok = earliest_isr >= required - 5.0  # 5 min tolerance
+
+    return {
+        "sync_group": sync_group,
+        "bda_lag_minutes": bda_lag,
+        "timing_alignment": alignment,
+        "alignment_ok": alignment_ok,
+        "tot_spread_minutes": tot_spread,
+        "mean_strike_tot_minutes": mean_tot,
+        "strike_platform_count": strike_platforms,
+        "isr_platform_count": isr_platforms,
+        "bda_lag_ok": bda_ok,
+        "bda_slack_minutes": bda_slack_min,
+        "cruise_kt_assumed": cruise_kt,
+        "note": "Advisory indicators from geometry + lag intent; not a temporal optimizer.",
+    }
 
 
 class MissionOption(BaseModel):
@@ -57,15 +174,9 @@ class MissionOption(BaseModel):
         total_distance = sum(
             (p.route.total_distance_nmi if p.route else 0.0) for p in self.result.plans
         )
-        sync = {}
+        sync = None
         if self.emphasis == EMPHASIS_SYNCHRONIZED:
-            sync = {
-                "sync_group": self.router_inputs.get("sync_group"),
-                "bda_lag_minutes": self.router_inputs.get("bda_lag_minutes"),
-                "timing_alignment": self.router_inputs.get(
-                    "timing_alignment", "intent-recorded"
-                ),
-            }
+            sync = compute_sync_timing(self.result, self.router_inputs)
         return {
             "option_id": self.option_id,
             "label": self.label,
@@ -79,10 +190,11 @@ class MissionOption(BaseModel):
             "idle_count": s.get("idle", 0),
             "total_distance_nmi": round(total_distance, 2),
             "supplier_id": self.router_inputs.get("supplier_id"),
+            "vias": list(self.router_inputs.get("vias") or []),
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "notes": list(self.notes),
-            "sync": sync or None,
+            "sync": sync,
         }
 
     def to_list_item(self) -> dict[str, Any]:
@@ -144,6 +256,12 @@ class OptionStore:
             other.preferred = other.option_id == option_id
         opt.updated_at = datetime.now(timezone.utc)
         return opt
+
+    def get_preferred(self) -> Optional[MissionOption]:
+        for opt in self._options.values():
+            if opt.preferred:
+                return opt
+        return None
 
 
 OPTION_STORE = OptionStore()
@@ -272,6 +390,7 @@ def ensure_top_three(
     *,
     store: Optional[OptionStore] = None,
     force: bool = False,
+    supplier_id: Optional[str] = None,
 ) -> list[MissionOption]:
     store = store or OPTION_STORE
     labels = {
@@ -279,6 +398,9 @@ def ensure_top_three(
         "B": "Option B — Synchronized",
         "C": "Option C — Unexpected axis",
     }
+    if force:
+        # Replace working set cleanly for demo / showcase rebuilds
+        store.clear()
     created: list[MissionOption] = []
     for slot, emphasis in DEFAULT_EMPHASIS_BY_SLOT.items():
         existing_id = store.slot_map().get(slot)
@@ -289,6 +411,7 @@ def ensure_top_three(
             label=labels[slot],
             emphasis=emphasis,
             slot=slot,
+            supplier_id=supplier_id,
             axis_name="northern" if emphasis == EMPHASIS_UNEXPECTED_AXIS else None,
             store=store,
         )
@@ -361,6 +484,24 @@ def rerun_option(
     return parent
 
 
+def resolve_export_option_id(
+    option_id: Optional[str] = None,
+    *,
+    store: Optional[OptionStore] = None,
+) -> tuple[Optional[str], Optional[PlanCycleResult]]:
+    """Pick explicit option_id, else preferred option, else None (use session latest)."""
+    store = store or OPTION_STORE
+    if option_id:
+        opt = store.get(option_id)
+        if opt is None:
+            raise KeyError(option_id)
+        return opt.option_id, opt.result
+    preferred = store.get_preferred()
+    if preferred is not None:
+        return preferred.option_id, preferred.result
+    return None, None
+
+
 def compare_options(
     option_ids: Optional[list[str]] = None,
     *,
@@ -375,7 +516,6 @@ def compare_options(
                 raise KeyError(oid)
             opts.append(opt)
     else:
-        # Prefer slotted A/B/C; else all
         slotted = []
         for slot in ("A", "B", "C"):
             oid = store.slot_map().get(slot)
@@ -385,6 +525,7 @@ def compare_options(
                     slotted.append(opt)
         opts = slotted or store.list_options()
 
+    preferred = store.get_preferred()
     return {
         "human_in_the_loop": True,
         "note": (
@@ -392,5 +533,6 @@ def compare_options(
             "export. No automatic best-option picker."
         ),
         "slots": store.slot_map(),
+        "preferred_option_id": preferred.option_id if preferred else None,
         "options": [o.summary_metrics() for o in opts],
     }

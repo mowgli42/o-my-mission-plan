@@ -8,6 +8,8 @@ const state = {
   world: null,
   plan: null,
   overview: null,
+  options: null,
+  compare: null,
   selectedAircraftId: null,
   selectedRouteId: null,
   selectedEventId: null,
@@ -571,8 +573,178 @@ function setView(name) {
 function setPlanReady(ready) {
   $("#btn-insert").disabled = !ready;
   $("#btn-insert-submit").disabled = !ready;
-  $("#btn-export").disabled = !ready;
+  const hasPref = !!(
+    state.compare?.preferred_option_id ||
+    state.options?.options?.some((o) => o.preferred)
+  );
+  $("#btn-export").disabled = !ready && !hasPref;
   $("#tab-routes").disabled = !ready;
+}
+
+function emphasisLabel(e) {
+  if (e === "efficient") return "Efficient";
+  if (e === "synchronized") return "Synchronized";
+  if (e === "unexpected_axis") return "Unexpected axis";
+  return e || "—";
+}
+
+function renderOptionCards() {
+  const host = $("#option-cards");
+  if (!host) return;
+  const slots = state.compare?.slots || state.options?.slots || { A: null, B: null, C: null };
+  const byId = Object.fromEntries((state.options?.options || []).map((o) => [o.option_id, o]));
+  const order = ["A", "B", "C"];
+  const defaults = {
+    A: { emphasis: "efficient", title: "Option A — Efficient" },
+    B: { emphasis: "synchronized", title: "Option B — Synchronized" },
+    C: { emphasis: "unexpected_axis", title: "Option C — Unexpected axis" },
+  };
+
+  host.innerHTML = order
+    .map((slot) => {
+      const oid = slots[slot];
+      const opt = oid ? byId[oid] : null;
+      if (!opt) {
+        const d = defaults[slot];
+        return `
+          <article class="option-card empty" data-emphasis="${d.emphasis}">
+            <div class="slot-mark">SLOT ${slot}</div>
+            <h3>${d.title}</h3>
+            <p class="meta">Not built yet. Use <strong>Build A / B / C</strong> to frame the top-three working set.</p>
+            <div class="option-metrics">
+              <div class="om"><span>Emphasis</span><strong>${emphasisLabel(d.emphasis)}</strong></div>
+              <div class="om"><span>Status</span><strong>empty</strong></div>
+            </div>
+          </article>`;
+      }
+      const sync = opt.sync;
+      let syncHtml = "";
+      if (sync) {
+        const ok = sync.alignment_ok && sync.bda_lag_ok !== false;
+        const cls = ok ? "ok" : "warn";
+        const bda =
+          sync.bda_lag_ok == null ? "" : sync.bda_lag_ok ? " · BDA ok" : " · BDA early";
+        syncHtml = `<div class="sync-chip ${cls}">sync ${sync.timing_alignment} · ΔTOT ${sync.tot_spread_minutes}m · BDA lag ${sync.bda_lag_minutes}m${bda}</div>`;
+      }
+      const vias = (opt.vias || opt.router_inputs?.vias || []).join(" → ") || "—";
+      return `
+        <article class="option-card ${opt.preferred ? "preferred" : ""}" data-emphasis="${opt.emphasis}" data-option="${opt.option_id}">
+          <div class="slot-mark">SLOT ${slot}${opt.preferred ? " · PREFERRED" : ""}</div>
+          <h3>${opt.label}</h3>
+          <p class="meta">${emphasisLabel(opt.emphasis)} · supplier ${opt.supplier_id || "fallback"} · vias ${vias}</p>
+          <div class="option-metrics">
+            <div class="om"><span>GO</span><strong class="go">${opt.go_count}</strong></div>
+            <div class="om"><span>NO-GO</span><strong class="nogo">${opt.nogo_count}</strong></div>
+            <div class="om"><span>Unallocated</span><strong>${opt.unallocated_count}</strong></div>
+            <div class="om"><span>Distance</span><strong>${Number(opt.total_distance_nmi).toFixed(0)} nmi</strong></div>
+          </div>
+          ${syncHtml}
+          <div class="card-actions">
+            <button type="button" class="btn btn-primary btn-prefer" data-prefer="${opt.option_id}">Prefer</button>
+            <button type="button" class="btn btn-export-option" data-export-option="${opt.option_id}">Export</button>
+          </div>
+        </article>`;
+    })
+    .join("");
+
+  host.querySelectorAll("[data-prefer]").forEach((btn) => {
+    btn.addEventListener("click", () => preferOption(btn.dataset.prefer));
+  });
+  host.querySelectorAll("[data-export-option]").forEach((btn) => {
+    btn.addEventListener("click", () => exportRoutes(btn.dataset.exportOption));
+  });
+}
+
+function renderCompareTable() {
+  const tbody = $("#compare-tbody");
+  if (!tbody) return;
+  const rows = state.compare?.options || [];
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="hint">Build the top-three to populate comparison.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows
+    .map((o) => {
+      const syncBits = o.sync
+        ? `${o.sync.timing_alignment} (Δ${o.sync.tot_spread_minutes}m)`
+        : (o.vias || []).length
+          ? (o.vias || []).slice(0, 3).join(" → ")
+          : "—";
+      return `
+        <tr class="${o.preferred ? "preferred-row" : ""}" data-option="${o.option_id}">
+          <td>${o.slot || "—"}</td>
+          <td>${emphasisLabel(o.emphasis)}</td>
+          <td>${o.go_count}</td>
+          <td>${o.nogo_count}</td>
+          <td>${o.unallocated_count}</td>
+          <td>${Number(o.total_distance_nmi).toFixed(0)}</td>
+          <td>${syncBits}</td>
+          <td>${o.preferred ? "yes" : "—"}</td>
+          <td>
+            <button type="button" class="btn btn-ghost btn-prefer" data-prefer="${o.option_id}">Prefer</button>
+          </td>
+        </tr>`;
+    })
+    .join("");
+  tbody.querySelectorAll("[data-prefer]").forEach((btn) => {
+    btn.addEventListener("click", () => preferOption(btn.dataset.prefer));
+  });
+}
+
+async function loadOptions() {
+  state.options = await api("/api/options");
+  state.compare = await api("/api/options/compare");
+  const suppliers = await api("/api/suppliers").catch(() => null);
+  if (suppliers?.active && $("#options-supplier")) {
+    $("#options-supplier").value = suppliers.active;
+  }
+  renderOptionCards();
+  renderCompareTable();
+  const hasPref = !!(
+    state.compare?.preferred_option_id || state.options?.options?.some((o) => o.preferred)
+  );
+  if (hasPref) $("#btn-export").disabled = false;
+}
+
+async function buildTopThree() {
+  try {
+    const supplier = $("#options-supplier")?.value || "fallback";
+    const data = await api(
+      `/api/options/top-three?force=true&supplier_id=${encodeURIComponent(supplier)}`,
+      { method: "POST" },
+    );
+    state.options = { slots: data.slots, options: data.options };
+    state.compare = await api("/api/options/compare");
+    renderOptionCards();
+    renderCompareTable();
+    toast(`Top-three ready · session supplier ${supplier}`, "info");
+    setView("options");
+    if (data.options?.length) {
+      try {
+        state.plan = await api("/api/plan");
+        setPlanReady(true);
+        await loadOverview();
+      } catch {
+        setPlanReady(true);
+      }
+    }
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  }
+}
+
+async function preferOption(optionId) {
+  try {
+    await api(`/api/options/${optionId}/prefer`, {
+      method: "POST",
+      body: JSON.stringify({ preferred: true }),
+    });
+    await loadOptions();
+    $("#btn-export").disabled = false;
+    toast("Preferred option set — Export uses this by default");
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  }
 }
 
 async function loadWorld() {
@@ -620,25 +792,32 @@ async function resetWorld() {
     await api("/api/reset", { method: "POST" });
     state.plan = null;
     state.overview = null;
+    state.options = null;
+    state.compare = null;
     state.selectedRouteId = null;
     setPlanReady(false);
     closeDetails();
     setView("plan");
     await loadWorld();
+    await loadOptions();
     toast("Demo world reset");
   } catch (err) {
     toast(String(err.message || err), "error");
   }
 }
 
-async function exportRoutes() {
+async function exportRoutes(optionId = null) {
   try {
+    const body = { include_nogo: false, write: true };
+    if (optionId) body.option_id = optionId;
     const bundle = await api("/api/routes/export", {
       method: "POST",
-      body: JSON.stringify({ include_nogo: false, write: true }),
+      body: JSON.stringify(body),
     });
     const n = bundle.summary?.route_count ?? bundle.routes?.length ?? 0;
-    toast(`Exported ${n} GO route(s) → ${bundle.written_paths?.latest || "data/routes/"}`);
+    const src = bundle.export_source || "session";
+    const opt = bundle.option_id ? ` · option ${bundle.option_id.slice(0, 8)}` : "";
+    toast(`Exported ${n} GO route(s) (${src}${opt}) → ${bundle.written_paths?.latest || "data/routes/"}`);
   } catch (err) {
     toast(String(err.message || err), "error");
   }
@@ -681,10 +860,14 @@ async function insertTask(fromForm = true) {
 
 function wire() {
   $("#btn-plan").addEventListener("click", runPlan);
-  $("#btn-export").addEventListener("click", exportRoutes);
+  $("#btn-export").addEventListener("click", () => exportRoutes());
   $("#btn-reset").addEventListener("click", resetWorld);
   $("#btn-insert").addEventListener("click", () => insertTask(false));
   $("#btn-more-details").addEventListener("click", openDetails);
+  $("#btn-top-three")?.addEventListener("click", buildTopThree);
+  $("#btn-refresh-options")?.addEventListener("click", () =>
+    loadOptions().catch((err) => toast(String(err.message || err), "error")),
+  );
   $("#insert-form").addEventListener("submit", (e) => {
     e.preventDefault();
     insertTask(true);
@@ -698,6 +881,9 @@ function wire() {
     t.addEventListener("click", () => {
       if (t.disabled) return;
       setView(t.dataset.view);
+      if (t.dataset.view === "options") {
+        loadOptions().catch((err) => toast(String(err.message || err), "error"));
+      }
     });
   });
   $$("[data-close-drawer]").forEach((el) => el.addEventListener("click", closeDetails));
@@ -705,13 +891,21 @@ function wire() {
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input, select, textarea")) return;
     if (e.key === "p" || e.key === "P") runPlan();
+    if (e.key === "o" || e.key === "O") {
+      setView("options");
+      loadOptions().catch((err) => toast(String(err.message || err), "error"));
+    }
     if (e.key === "e" || e.key === "E") {
       if (!$("#btn-export").disabled) exportRoutes();
     }
     if (e.key === "r" || e.key === "R") resetWorld();
     if ((e.key === "i" || e.key === "I") && !$("#btn-insert").disabled) insertTask(false);
     if (e.key === "1") setView("plan");
-    if (e.key === "2" && !$("#tab-routes").disabled) setView("routes");
+    if (e.key === "2") {
+      setView("options");
+      loadOptions().catch(() => {});
+    }
+    if (e.key === "3" && !$("#tab-routes").disabled) setView("routes");
     if (e.key === "Escape") closeDetails();
     if (e.key === "?") {
       const help = document.querySelector(".help");
@@ -721,4 +915,6 @@ function wire() {
 }
 
 wire();
-loadWorld().catch((err) => toast(String(err.message || err), "error"));
+loadWorld()
+  .then(() => loadOptions())
+  .catch((err) => toast(String(err.message || err), "error"));

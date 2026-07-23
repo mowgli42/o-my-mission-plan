@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from .base import RouteSupplier, configured_supplier_id
 from .costgrid import CostGridSupplier
@@ -25,6 +25,7 @@ def build_supplier(
     mission_waypoints: dict,
     aircraft_by_id: dict,
     tasks_by_id: dict,
+    threats: Optional[list] = None,
 ) -> RouteSupplier:
     sid = (supplier_id or configured_supplier_id()).lower()
     fallback = FallbackSupplier(
@@ -39,7 +40,7 @@ def build_supplier(
     if sid in ("openroutefinder", "orf"):
         return OpenRouteFinderSupplier(fallback)
     if sid in ("costgrid", "grid"):
-        return CostGridSupplier(fallback)
+        return CostGridSupplier(fallback, threats=list(threats or []))
     raise ValueError(f"Unknown ROUTE_SUPPLIER: {sid}")
 
 
@@ -52,12 +53,12 @@ def list_suppliers() -> list[dict[str, Any]]:
         },
         {
             "id": "openroutefinder",
-            "description": "Civil Dijkstra adapter (falls back if package missing)",
-            "status": "adapter-ready",
+            "description": "ORF-style Dijkstra on PSAB published nav graph",
+            "status": "spike-ready",
         },
         {
             "id": "costgrid",
-            "description": "networkx cost-grid / avoid zones (stub → fallback)",
-            "status": "stub",
+            "description": "Dijkstra cost-grid with threat / avoid-zone penalties",
+            "status": "ready",
         },
     ]
