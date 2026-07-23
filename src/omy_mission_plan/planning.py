@@ -20,7 +20,10 @@ from .models import (
     TaskType,
 )
 from .propagator import propagate
-from .route_generator import PublishedFix, generate_route
+from .route_generator import PublishedFix, associate_tasks, assert_published_only
+from .suppliers import build_supplier, configured_supplier_id, list_suppliers
+from .suppliers.base import SupplierRouteRequest
+from .suppliers.fallback import response_to_route
 
 
 class PlannedAircraft(BaseModel):
@@ -33,6 +36,7 @@ class PlannedAircraft(BaseModel):
     route: Optional[Route] = None
     fuel: Optional[FuelState] = None
     status: str  # "idle" | "GO" | "NO-GO"
+    supplier_source: Optional[str] = None
 
 
 class PlanCycleResult(BaseModel):
@@ -52,6 +56,9 @@ class WorldSnapshot(BaseModel):
     aircraft: list
     tasks: list
     threats: list = Field(default_factory=list)
+    supplier_id: str = "fallback"
+    router_inputs: dict = Field(default_factory=dict)
+    available_suppliers: list = Field(default_factory=list)
 
 
 class PlanningSession:
@@ -75,6 +82,34 @@ class PlanningSession:
         self.routes: dict[str, Route] = {}
         self.fuel: dict[str, FuelState] = {}
         self.last_export_paths: dict[str, str] = {}
+        self.supplier_id: str = configured_supplier_id()
+        self.vias: list[str] = []
+        self.avoid_fix_ids: list[str] = []
+        self.router_inputs: dict[str, Any] = {
+            "supplier_id": self.supplier_id,
+            "vias": [],
+            "avoid_fix_ids": [],
+        }
+        self.last_supplier_notes: list[str] = []
+
+    def apply_router_inputs(self, inputs: dict[str, Any]) -> None:
+        """Apply saved CONOPS router inputs before the next plan cycle."""
+        self.router_inputs = deepcopy(inputs)
+        if inputs.get("supplier_id"):
+            self.supplier_id = str(inputs["supplier_id"])
+        self.vias = list(inputs.get("vias") or [])
+        self.avoid_fix_ids = list(inputs.get("avoid_fix_ids") or [])
+
+    def _supplier(self):
+        ac_by_id = {a.id: a for a in self.aircraft}
+        return build_supplier(
+            self.supplier_id,
+            airbases=self.airbases,
+            navaids=self.navaids,
+            mission_waypoints=self.mission_waypoints,
+            aircraft_by_id=ac_by_id,
+            tasks_by_id=self.task_index,
+        )
 
     def snapshot(self) -> WorldSnapshot:
         return WorldSnapshot(
@@ -95,19 +130,37 @@ class PlanningSession:
             aircraft=self.aircraft,
             tasks=self.tasks,
             threats=self.threats,
+            supplier_id=self.supplier_id,
+            router_inputs=deepcopy(self.router_inputs),
+            available_suppliers=list_suppliers(),
         )
 
-    def _generate(self, ac, assigned) -> tuple[Route, FuelState]:
+    def _generate(self, ac, assigned) -> tuple[Route, FuelState, str, list[str]]:
         home = self.airbases[ac.home_base_id]
-        route = generate_route(
-            ac,
-            assigned,
-            home,
-            self.navaids,
-            airbases=self.airbases,
-            mission_waypoints=self.mission_waypoints,
+        supplier = self._supplier()
+        request = SupplierRouteRequest(
+            origin_id=home.id,
+            origin=home.location,
+            destination_id=home.id,
+            destination=home.location,
+            vias=list(self.vias),
+            avoid_fix_ids=list(self.avoid_fix_ids),
+            approach_axis_label=self.router_inputs.get("axis_name")
+            or self.router_inputs.get("axis_profile"),
+            aircraft_type_hint=ac.type,
+            task_ids=[t.id for t in assigned],
+            aircraft_id=ac.id,
         )
-        return propagate(route, ac)
+        response = supplier.plan(request)
+        route = response_to_route(
+            response,
+            aircraft_id=ac.id,
+            assigned_task_ids=[t.id for t in assigned],
+        )
+        route = associate_tasks(route, assigned)
+        assert_published_only(route)
+        route, fuel = propagate(route, ac)
+        return route, fuel, response.source, list(response.notes)
 
     def run_plan_cycle(self) -> PlanCycleResult:
         allocation = allocate(self.tasks, self.aircraft, self.airbases)
@@ -118,6 +171,7 @@ class PlanningSession:
         plans: list[PlannedAircraft] = []
         self.routes.clear()
         self.fuel.clear()
+        self.last_supplier_notes = []
 
         for ac in self.aircraft:
             tids = self.assignments.get(ac.id, [])
@@ -135,9 +189,12 @@ class PlanningSession:
                 )
                 continue
 
-            route, fuel = self._generate(ac, assigned)
+            route, fuel, source, notes = self._generate(ac, assigned)
             self.routes[ac.id] = route
             self.fuel[ac.id] = fuel
+            for note in notes:
+                if note not in self.last_supplier_notes:
+                    self.last_supplier_notes.append(note)
             plans.append(
                 PlannedAircraft(
                     aircraft_id=ac.id,
@@ -149,6 +206,7 @@ class PlanningSession:
                     route=route,
                     fuel=fuel,
                     status="GO" if fuel.feasible else "NO-GO",
+                    supplier_source=source,
                 )
             )
 
@@ -167,6 +225,9 @@ class PlanningSession:
                 "idle": sum(1 for p in plans if p.status == "idle"),
                 "scenario_id": demo_world.SCENARIO_ID,
                 "launch_base_id": demo_world.LAUNCH_BASE_ID,
+                "supplier_id": self.supplier_id,
+                "vias": list(self.vias),
+                "avoid_fix_ids": list(self.avoid_fix_ids),
             },
         )
         self.latest = result
@@ -188,9 +249,12 @@ class PlanningSession:
 
         ac = aircraft_by_id(self.aircraft, aircraft_id)
         assigned = [self.task_index[tid] for tid in tids]
-        route, fuel = self._generate(ac, assigned)
+        route, fuel, source, notes = self._generate(ac, assigned)
         self.routes[aircraft_id] = route
         self.fuel[aircraft_id] = fuel
+        for note in notes:
+            if note not in self.last_supplier_notes:
+                self.last_supplier_notes.append(note)
 
         planned = PlannedAircraft(
             aircraft_id=ac.id,
@@ -202,6 +266,7 @@ class PlanningSession:
             route=route,
             fuel=fuel,
             status="GO" if fuel.feasible else "NO-GO",
+            supplier_source=source,
         )
 
         if self.latest:
@@ -219,6 +284,9 @@ class PlanningSession:
                 "idle": sum(1 for p in updated_plans if p.status == "idle"),
                 "scenario_id": demo_world.SCENARIO_ID,
                 "launch_base_id": demo_world.LAUNCH_BASE_ID,
+                "supplier_id": self.supplier_id,
+                "vias": list(self.vias),
+                "avoid_fix_ids": list(self.avoid_fix_ids),
             }
 
         return planned
@@ -229,12 +297,14 @@ class PlanningSession:
         include_nogo: bool = False,
         directory: Path | str = "data/routes",
         write: bool = True,
+        plan: Optional[PlanCycleResult] = None,
     ) -> dict[str, Any]:
         """Build (and optionally write) the o-my-sim route import bundle."""
-        if self.latest is None:
+        result = plan if plan is not None else self.latest
+        if result is None:
             raise RuntimeError("No plan yet — run a plan cycle first")
         bundle = build_export_bundle(
-            self.latest, self.aircraft, include_nogo=include_nogo
+            result, self.aircraft, include_nogo=include_nogo
         )
         if write:
             self.last_export_paths = write_export_bundle(bundle, directory=directory)

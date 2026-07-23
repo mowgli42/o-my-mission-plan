@@ -36,6 +36,8 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 | Dark-theme IxDF planning UI | Done |
 | Routes overview (battlespace table + debrief timeline) | Done |
 | Route details drawer (map + threats + tasks) | Done |
+| Pluggable route suppliers (`ROUTE_SUPPLIER`) | Done (fallback + ORF/costgrid adapters) |
+| CONOPS Mission Options A/B/C + compare / re-run | Done |
 | Unit / API tests | Done (`make test`) |
 
 ---
@@ -66,9 +68,11 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 | `models.py` | Aircraft, Task, Route, FuelState, AllocationResult, … |
 | `demo_world.py` | PSAB launch, Kuwait/Iraq tasks, navaids + mission waypoints |
 | `allocator.py` | Regional grouping + type-capable assignment; always returns unallocated ids |
-| `route_generator.py` | Home → published fixes → home (proximity validated; no PROX-*) |
+| `route_generator.py` | Fallback published-fix path + task association (no PROX-*) |
+| `suppliers/` | Pluggable adapters: fallback, openRouteFinder, cost-grid stub |
 | `propagator.py` | Constant burn + fixed reserve → GO / NO-GO |
-| `planning.py` | Full plan cycle + dynamic insert |
+| `planning.py` | Full plan cycle + dynamic insert via selected supplier |
+| `options.py` | Mission Options store (A/B/C, compare, re-run) |
 | `export_routes.py` | o-my-sim import bundle (`o-my.mission-plan.routes/v1`) |
 | `routes_overview.py` | Metrics, threat bands, debrief-style timelines |
 | `app.py` | FastAPI service + static UI |
@@ -80,18 +84,33 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 | GET | `/api/health` | Liveness |
 | GET | `/api/world` | Demo fixtures snapshot (scenario + mission waypoints) |
 | POST | `/api/reset` | Reset in-memory world |
-| POST | `/api/plan` | Allocate → route → fuel propagate |
+| POST | `/api/plan` | Allocate → supplier route → fuel propagate |
 | GET | `/api/plan` | Latest plan result |
+| GET | `/api/suppliers` | Active + available route suppliers |
 | POST | `/api/tasks/insert` | Inject task; full re-assess for one aircraft |
 | POST | `/api/propagate` | Fuel-propagate an arbitrary route |
-| POST | `/api/routes/export` | Write final GO routes for o-my-sim |
+| POST | `/api/options` | Create Mission Option (emphasis + router inputs) |
+| POST | `/api/options/top-three` | Fill slots A/B/C (Efficient / Synchronized / Unexpected-axis) |
+| GET | `/api/options` | List options + slot map |
+| GET | `/api/options/compare` | Side-by-side comparison metrics |
+| POST | `/api/options/{id}/slot` | Pin option to A/B/C |
+| POST | `/api/options/{id}/rerun` | Re-run with saved/patched inputs |
+| POST | `/api/options/{id}/prefer` | Mark preferred option for export |
+| POST | `/api/routes/export` | Write final GO routes (optional `option_id`) |
 | GET | `/api/routes/export` | Build export bundle without writing |
 | GET | `/api/routes/overview` | Routes screen: metrics, threats, timelines |
 | GET | `/` | Dark planning UI |
 | GET | `/docs` | Swagger |
 
+Set `ROUTE_SUPPLIER=fallback|openroutefinder|costgrid` to select the lateral path adapter (default `fallback`).
+
 ### Docs
 
+- [`docs/CONOPS.md`](docs/CONOPS.md) — iterative cycle + top-three Mission Options
+- [`docs/SUPPLIER-ROUTE-TOOLS.md`](docs/SUPPLIER-ROUTE-TOOLS.md) — supplier tool survey + adapter model
+- [`docs/INTEGRATION-GUIDE.md`](docs/INTEGRATION-GUIDE.md) — wiring suppliers and options
+- [`docs/CIVIL-ROUTE-DEV-GUIDE.md`](docs/CIVIL-ROUTE-DEV-GUIDE.md) — civil / Dijkstra path
+- [`docs/MISSION-ROUTE-DEV-GUIDE.md`](docs/MISSION-ROUTE-DEV-GUIDE.md) — mission constraints for B/C
 - [`docs/DEMO-WORLD.md`](docs/DEMO-WORLD.md) — PSAB / Kuwait / Iraq scenario
 - [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md) — published-waypoint-only design
 - [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — export contract for o-my-sim
