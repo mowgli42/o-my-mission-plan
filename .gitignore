@@ -26,6 +26,9 @@ data/**
 !data/.gitkeep
 !data/routes/
 !data/routes/.gitkeep
+!data/nav/
+!data/nav/**
+!data/nav/.gitkeep
 
 # OS / IDE
 .DS_Store

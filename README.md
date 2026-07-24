@@ -134,23 +134,21 @@ Routes for fleet overview; More details for map / threats / task breakout.
 
 ## Screenshots
 
-### 1. Plan tab — PSAB / Kuwait / Iraq
+### 1. Plan tab — cost grid + threats
 
 ![Plan PSAB world](docs/screenshots/01-plan-psab-world.png)
 
-### 2. Options tab — CONOPS top-three (Efficient / Synchronized / Unexpected-axis)
-
-Build A/B/C, compare GO / distance / sync timing, prefer one for export.
+### 2. Options tab — force archetypes A/B/C
 
 ![Options top-three](docs/screenshots/02-options-top-three.png)
 
-### 3. Routes overview — metrics + battlespace-style route list
+### 3. Routes overview — metrics + table
 
 ![Routes overview](docs/screenshots/03-routes-overview-metrics.png)
 
-### 4. Route timeline / key events (o-my-debrief alignment)
+### 4. Aligned multi-platform timeline (TOT)
 
-![Route timeline](docs/screenshots/04-route-timeline-events.png)
+![Aligned timeline](docs/screenshots/04-aligned-timeline.png)
 
 ### 5. More details — map, threats, task breakout
 
