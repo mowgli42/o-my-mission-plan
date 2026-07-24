@@ -68,10 +68,15 @@ class ExportRequest(BaseModel):
 
 class CreateOptionRequest(BaseModel):
     label: str = "Mission Option"
-    emphasis: str = Field(
-        default="efficient",
+    emphasis: Optional[str] = Field(
+        default=None,
         examples=["efficient", "synchronized", "unexpected_axis"],
     )
+    archetype: Optional[str] = Field(
+        default=None,
+        examples=["efficient", "synchronized", "maneuver", "surprise", "shock", "attrition"],
+    )
+    hybrid_tags: Optional[list[str]] = None
     slot: Optional[str] = Field(default=None, examples=["A", "B", "C"])
     supplier_id: Optional[str] = None
     vias: Optional[list[str]] = None
@@ -80,6 +85,11 @@ class CreateOptionRequest(BaseModel):
     sync_group: str = "wave-1"
     bda_lag_minutes: float = 30.0
     router_input_overrides: Optional[dict[str, Any]] = None
+
+
+class PlatformOrderRequest(BaseModel):
+    order: list[str]
+    group_by_type: Optional[bool] = None
 
 
 class SlotRequest(BaseModel):
@@ -270,8 +280,10 @@ def routes_overview():
 
 @app.post("/api/options")
 def create_option(body: CreateOptionRequest):
-    """Create a Mission Option: frame emphasis + router inputs → plan cycle."""
-    if body.emphasis not in VALID_EMPHASES:
+    """Create a Mission Option in the contingency pool (optionally pin to a slot)."""
+    if body.emphasis is None and body.archetype is None:
+        body.emphasis = "efficient"
+    if body.emphasis is not None and body.emphasis not in VALID_EMPHASES:
         raise HTTPException(
             status_code=400,
             detail=f"emphasis must be one of {sorted(VALID_EMPHASES)}",
@@ -281,6 +293,8 @@ def create_option(body: CreateOptionRequest):
             session,
             label=body.label,
             emphasis=body.emphasis,
+            archetype=body.archetype,
+            hybrid_tags=body.hybrid_tags,
             slot=body.slot,
             supplier_id=body.supplier_id,
             vias=body.vias,
@@ -292,27 +306,37 @@ def create_option(body: CreateOptionRequest):
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return opt.to_detail()
+    return opt.to_detail(baseline_distance_nmi=OPTION_STORE.efficient_baseline_distance())
 
 
 @app.post("/api/options/top-three")
 def create_top_three(force: bool = False, supplier_id: Optional[str] = None):
-    """Ensure slots A/B/C hold Efficient / Synchronized / Unexpected-axis options."""
+    """Ensure slots A/B/C hold Efficient / Synchronized / Maneuver options."""
     created = ensure_top_three(
         session, force=force, supplier_id=supplier_id or None
     )
+    baseline = OPTION_STORE.efficient_baseline_distance()
     return {
-        "created": [o.to_list_item() for o in created],
+        "created": [o.to_list_item(baseline_distance_nmi=baseline) for o in created],
         "slots": OPTION_STORE.slot_map(),
-        "options": [o.to_list_item() for o in OPTION_STORE.list_options()],
+        "pool_size": OPTION_STORE.pool_size(),
+        "options": [
+            o.to_list_item(baseline_distance_nmi=baseline)
+            for o in OPTION_STORE.list_options()
+        ],
     }
 
 
 @app.get("/api/options")
 def list_options():
+    baseline = OPTION_STORE.efficient_baseline_distance()
     return {
         "slots": OPTION_STORE.slot_map(),
-        "options": [o.to_list_item() for o in OPTION_STORE.list_options()],
+        "pool_size": OPTION_STORE.pool_size(),
+        "options": [
+            o.to_list_item(baseline_distance_nmi=baseline)
+            for o in OPTION_STORE.list_options()
+        ],
     }
 
 
@@ -378,6 +402,129 @@ def prefer_option(option_id: str, body: Optional[PreferOptionRequest] = None):
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return opt.to_list_item()
+
+
+@app.post("/api/options/{option_id}/unpin")
+def unpin_option(option_id: str):
+    """Remove option from A/B/C; remains in contingency pool."""
+    try:
+        opt = OPTION_STORE.unpin(option_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return opt.to_list_item()
+
+
+@app.get("/api/options/{option_id}/gaps")
+def option_gaps(option_id: str):
+    """Rules-only GapReport stub (FORCE-APPROACHES §5)."""
+    opt = OPTION_STORE.get(option_id)
+    if opt is None:
+        raise HTTPException(status_code=404, detail=f"Unknown option: {option_id}")
+    pool_arch = [o.archetype for o in OPTION_STORE.list_options()]
+    return opt.gap_report(pool_archetypes=pool_arch).model_dump(by_alias=True)
+
+
+@app.get("/api/archetypes")
+def list_archetypes():
+    from .archetypes import ARCHETYPE_CATALOG
+
+    return {"archetypes": ARCHETYPE_CATALOG}
+
+
+@app.get("/api/map/costgrid")
+def map_costgrid(cell_nmi: float = 45.0):
+    """Hex-like cost field from theater threats (display only)."""
+    from .map_layers import build_hex_costgrid
+
+    return build_hex_costgrid(session.threats, cell_nmi=cell_nmi)
+
+
+@app.get("/api/map/exposure")
+def map_exposure(option_id: Optional[str] = None):
+    """Per-platform legs that threats 'see' (jam/lethal)."""
+    from .map_layers import build_exposure_report
+
+    plan = None
+    if option_id:
+        opt = OPTION_STORE.get(option_id)
+        if opt is None:
+            raise HTTPException(status_code=404, detail=f"Unknown option: {option_id}")
+        plan = opt.result
+    elif session.latest is not None:
+        plan = session.latest
+    else:
+        raise HTTPException(status_code=404, detail="No plan yet")
+    return build_exposure_report(
+        plan, session.threats, aircraft_order=session.platform_order
+    )
+
+
+@app.get("/api/timeline")
+def aligned_timeline(option_id: Optional[str] = None):
+    """Multi-platform time-aligned tracks for TOT analysis."""
+    from .map_layers import build_aligned_timeline
+    from .options import compute_sync_timing
+
+    sync = None
+    plan = None
+    if option_id:
+        opt = OPTION_STORE.get(option_id)
+        if opt is None:
+            raise HTTPException(status_code=404, detail=f"Unknown option: {option_id}")
+        plan = opt.result
+        if opt.archetype == "synchronized" or opt.emphasis == "synchronized":
+            sync = compute_sync_timing(opt.result, opt.router_inputs)
+    elif session.latest is not None:
+        plan = session.latest
+    else:
+        raise HTTPException(status_code=404, detail="No plan yet")
+    return build_aligned_timeline(
+        plan, aircraft_order=session.platform_order, sync=sync
+    )
+
+
+@app.get("/api/map/positions")
+def map_positions(t_min: float = 0.0, option_id: Optional[str] = None):
+    """Aircraft positions along routes at mission time t_min (scrub sync)."""
+    from .map_layers import position_along_route
+
+    plan = None
+    if option_id:
+        opt = OPTION_STORE.get(option_id)
+        if opt is None:
+            raise HTTPException(status_code=404, detail=f"Unknown option: {option_id}")
+        plan = opt.result
+    elif session.latest is not None:
+        plan = session.latest
+    else:
+        raise HTTPException(status_code=404, detail="No plan yet")
+    positions = []
+    for p in plan.plans:
+        pos = position_along_route(p.route, t_min) if p.route else None
+        positions.append(
+            {
+                "aircraft_id": p.aircraft_id,
+                "label": p.label,
+                "aircraft_type": p.aircraft_type,
+                "status": p.status,
+                "position": pos,
+            }
+        )
+    return {"t_min": t_min, "positions": positions}
+
+
+@app.post("/api/platforms/order")
+def set_platform_order(body: PlatformOrderRequest):
+    """Persist display order for timeline / map (does not change allocation)."""
+    return session.set_platform_order(body.order, group_by_type=body.group_by_type)
+
+
+@app.get("/api/platforms/order")
+def get_platform_order():
+    return {
+        "platform_order": list(session.platform_order),
+        "platform_group_by_type": session.platform_group_by_type,
+    }
 
 
 # ---------------------------------------------------------------------------

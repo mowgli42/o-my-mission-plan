@@ -9,6 +9,15 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from .archetypes import (
+    ARCHETYPE_CATALOG,
+    ARCHETYPE_TO_EMPHASIS,
+    EMPHASIS_TO_ARCHETYPE,
+    VALID_ARCHETYPES,
+    archetype_fit_hint,
+    build_gap_report,
+    resolve_archetype,
+)
 from .planning import PlanCycleResult, PlanningSession
 from .suppliers import configured_supplier_id
 
@@ -27,6 +36,11 @@ DEFAULT_EMPHASIS_BY_SLOT = {
     "A": EMPHASIS_EFFICIENT,
     "B": EMPHASIS_SYNCHRONIZED,
     "C": EMPHASIS_UNEXPECTED_AXIS,
+}
+DEFAULT_ARCHETYPE_BY_SLOT = {
+    "A": "efficient",
+    "B": "synchronized",
+    "C": "maneuver",
 }
 
 DEFAULT_AXIS_PROFILES: dict[str, list[str]] = {
@@ -160,6 +174,8 @@ class MissionOption(BaseModel):
     option_id: str
     label: str
     emphasis: str
+    archetype: str = "efficient"
+    hybrid_tags: list[str] = Field(default_factory=list)
     slot: Optional[str] = None
     router_inputs: dict[str, Any] = Field(default_factory=dict)
     result: PlanCycleResult
@@ -169,18 +185,28 @@ class MissionOption(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     notes: list[str] = Field(default_factory=list)
 
-    def summary_metrics(self) -> dict[str, Any]:
+    def summary_metrics(self, *, baseline_distance_nmi: Optional[float] = None) -> dict[str, Any]:
         s = self.result.summary
         total_distance = sum(
             (p.route.total_distance_nmi if p.route else 0.0) for p in self.result.plans
         )
         sync = None
-        if self.emphasis == EMPHASIS_SYNCHRONIZED:
+        if self.emphasis == EMPHASIS_SYNCHRONIZED or self.archetype == "synchronized":
             sync = compute_sync_timing(self.result, self.router_inputs)
+        vias = list(self.router_inputs.get("vias") or [])
+        fit = archetype_fit_hint(
+            self.archetype,
+            vias=vias,
+            sync=sync,
+            total_distance_nmi=total_distance,
+            baseline_distance_nmi=baseline_distance_nmi,
+        )
         return {
             "option_id": self.option_id,
             "label": self.label,
             "emphasis": self.emphasis,
+            "archetype": self.archetype,
+            "hybrid_tags": list(self.hybrid_tags),
             "slot": self.slot,
             "preferred": self.preferred,
             "parent_option_id": self.parent_option_id,
@@ -190,22 +216,37 @@ class MissionOption(BaseModel):
             "idle_count": s.get("idle", 0),
             "total_distance_nmi": round(total_distance, 2),
             "supplier_id": self.router_inputs.get("supplier_id"),
-            "vias": list(self.router_inputs.get("vias") or []),
+            "vias": vias,
+            "archetype_fit": fit,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "notes": list(self.notes),
             "sync": sync,
         }
 
-    def to_list_item(self) -> dict[str, Any]:
-        item = self.summary_metrics()
+    def to_list_item(self, *, baseline_distance_nmi: Optional[float] = None) -> dict[str, Any]:
+        item = self.summary_metrics(baseline_distance_nmi=baseline_distance_nmi)
         item["router_inputs"] = deepcopy(self.router_inputs)
         return item
 
-    def to_detail(self) -> dict[str, Any]:
-        item = self.to_list_item()
+    def to_detail(self, *, baseline_distance_nmi: Optional[float] = None) -> dict[str, Any]:
+        item = self.to_list_item(baseline_distance_nmi=baseline_distance_nmi)
         item["result"] = self.result.model_dump(mode="json")
         return item
+
+    def gap_report(self, *, pool_archetypes: Optional[list[str]] = None):
+        sync = None
+        if self.emphasis == EMPHASIS_SYNCHRONIZED or self.archetype == "synchronized":
+            sync = compute_sync_timing(self.result, self.router_inputs)
+        return build_gap_report(
+            self.option_id,
+            self.archetype,
+            self.result,
+            vias=list(self.router_inputs.get("vias") or []),
+            sync=sync,
+            hybrid_tags=self.hybrid_tags,
+            pool_archetypes=pool_archetypes,
+        )
 
 
 class OptionStore:
@@ -261,6 +302,28 @@ class OptionStore:
         for opt in self._options.values():
             if opt.preferred:
                 return opt
+        return None
+
+    def unpin(self, option_id: str) -> MissionOption:
+        opt = self._options.get(option_id)
+        if opt is None:
+            raise KeyError(option_id)
+        if opt.slot and self._slots.get(opt.slot) == option_id:
+            del self._slots[opt.slot]
+        opt.slot = None
+        opt.updated_at = datetime.now(timezone.utc)
+        return opt
+
+    def pool_size(self) -> int:
+        return len(self._options)
+
+    def efficient_baseline_distance(self) -> Optional[float]:
+        for opt in self._options.values():
+            if opt.archetype == "efficient" or opt.emphasis == EMPHASIS_EFFICIENT:
+                return sum(
+                    (p.route.total_distance_nmi if p.route else 0.0)
+                    for p in opt.result.plans
+                )
         return None
 
 
@@ -331,7 +394,9 @@ def create_option_from_session(
     planning: PlanningSession,
     *,
     label: str,
-    emphasis: str,
+    emphasis: Optional[str] = None,
+    archetype: Optional[str] = None,
+    hybrid_tags: Optional[list[str]] = None,
     slot: Optional[str] = None,
     supplier_id: Optional[str] = None,
     vias: Optional[list[str]] = None,
@@ -343,10 +408,16 @@ def create_option_from_session(
     router_input_overrides: Optional[dict[str, Any]] = None,
     store: Optional[OptionStore] = None,
 ) -> MissionOption:
-    """Apply router inputs, run plan cycle, persist Mission Option."""
+    """Apply router inputs, run plan cycle, persist Mission Option in the pool."""
     store = store or OPTION_STORE
+    primary, tags = resolve_archetype(
+        archetype=archetype, emphasis=emphasis, hybrid_tags=hybrid_tags
+    )
+    emph = emphasis or ARCHETYPE_TO_EMPHASIS.get(primary, EMPHASIS_EFFICIENT)
+    if emph not in VALID_EMPHASES:
+        emph = EMPHASIS_EFFICIENT
     inputs = build_router_inputs(
-        emphasis,
+        emph,
         supplier_id=supplier_id,
         vias=vias,
         avoid_fix_ids=avoid_fix_ids,
@@ -355,24 +426,29 @@ def create_option_from_session(
         bda_lag_minutes=bda_lag_minutes,
         extra=router_input_overrides,
     )
+    inputs["archetype"] = primary
+    inputs["hybrid_tags"] = tags
     planning.apply_router_inputs(inputs)
     result = planning.run_plan_cycle()
     notes: list[str] = list(planning.last_supplier_notes)
-    if emphasis == EMPHASIS_SYNCHRONIZED:
+    notes.append(f"Archetype: {primary}" + (f" + {tags}" if tags else ""))
+    if emph == EMPHASIS_SYNCHRONIZED:
         notes.append(
             f"Synchronized: sync_group={inputs.get('sync_group')}, "
             f"bda_lag_minutes={inputs.get('bda_lag_minutes')} "
             "(timing metadata; lateral path uses supplier + published fixes)."
         )
-    if emphasis == EMPHASIS_UNEXPECTED_AXIS:
+    if emph == EMPHASIS_UNEXPECTED_AXIS:
         notes.append(
-            f"Unexpected-axis: axis={inputs.get('axis_name')} vias={inputs.get('vias')}"
+            f"Unexpected-axis / maneuver: axis={inputs.get('axis_name')} vias={inputs.get('vias')}"
         )
 
     option = MissionOption(
         option_id=str(uuid4()),
         label=label,
-        emphasis=emphasis,
+        emphasis=emph,
+        archetype=primary,
+        hybrid_tags=tags,
         slot=None,
         router_inputs=inputs,
         result=result,
@@ -396,10 +472,11 @@ def ensure_top_three(
     labels = {
         "A": "Option A — Efficient",
         "B": "Option B — Synchronized",
-        "C": "Option C — Unexpected axis",
+        "C": "Option C — Maneuver (unexpected axis)",
     }
     if force:
-        # Replace working set cleanly for demo / showcase rebuilds
+        # Keep pool contingencies unless force rebuild of slots only —
+        # full clear keeps demo simple when rebuilding the working set.
         store.clear()
     created: list[MissionOption] = []
     for slot, emphasis in DEFAULT_EMPHASIS_BY_SLOT.items():
@@ -410,6 +487,7 @@ def ensure_top_three(
             planning,
             label=labels[slot],
             emphasis=emphasis,
+            archetype=DEFAULT_ARCHETYPE_BY_SLOT[slot],
             slot=slot,
             supplier_id=supplier_id,
             axis_name="northern" if emphasis == EMPHASIS_UNEXPECTED_AXIS else None,
@@ -468,6 +546,8 @@ def rerun_option(
             option_id=str(uuid4()),
             label=label or f"{parent.label} (rerun)",
             emphasis=emphasis,
+            archetype=str(inputs.get("archetype") or parent.archetype),
+            hybrid_tags=list(inputs.get("hybrid_tags") or parent.hybrid_tags),
             slot=None,
             router_inputs=inputs,
             result=result,
@@ -478,6 +558,8 @@ def rerun_option(
 
     parent.router_inputs = inputs
     parent.emphasis = emphasis
+    parent.archetype = str(inputs.get("archetype") or parent.archetype)
+    parent.hybrid_tags = list(inputs.get("hybrid_tags") or parent.hybrid_tags)
     parent.result = result
     parent.notes.extend(notes)
     parent.updated_at = datetime.now(timezone.utc)
@@ -526,13 +608,19 @@ def compare_options(
         opts = slotted or store.list_options()
 
     preferred = store.get_preferred()
+    baseline = store.efficient_baseline_distance()
     return {
         "human_in_the_loop": True,
         "note": (
             "Comparison is advisory; planner selects preferred option for "
-            "export. No automatic best-option picker."
+            "export. No automatic best-option picker. Pool may exceed three; "
+            "slots A/B/C are the pinned working set."
         ),
         "slots": store.slot_map(),
+        "pool_size": store.pool_size(),
         "preferred_option_id": preferred.option_id if preferred else None,
-        "options": [o.summary_metrics() for o in opts],
+        "archetypes": ARCHETYPE_CATALOG,
+        "options": [
+            o.summary_metrics(baseline_distance_nmi=baseline) for o in opts
+        ],
     }

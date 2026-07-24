@@ -59,6 +59,11 @@ class WorldSnapshot(BaseModel):
     supplier_id: str = "fallback"
     router_inputs: dict = Field(default_factory=dict)
     available_suppliers: list = Field(default_factory=list)
+    nav_source: str = "fixture"
+    nav_notes: list[str] = Field(default_factory=list)
+    navaid_count: int = 0
+    platform_order: list[str] = Field(default_factory=list)
+    platform_group_by_type: bool = True
 
 
 class PlanningSession:
@@ -68,11 +73,14 @@ class PlanningSession:
         self.reset()
 
     def reset(self) -> None:
-        self.airbases = deepcopy(demo_world.AIRBASES)
-        self.navaids = deepcopy(demo_world.NAVAIDS)
-        self.mission_waypoints: dict[str, PublishedFix] = dict(
-            demo_world.MISSION_WAYPOINTS
-        )
+        from .nav_loader import load_nav_database
+
+        nav = load_nav_database()
+        self.airbases = deepcopy(nav["airbases"])
+        self.navaids = deepcopy(nav["navaids"])
+        self.mission_waypoints: dict[str, PublishedFix] = dict(nav["mission_waypoints"])
+        self.nav_source = str(nav.get("source") or "fixture")
+        self.nav_notes = list(nav.get("notes") or [])
         self.threats = deepcopy(demo_world.THREATS)
         self.aircraft = deepcopy(demo_world.AIRCRAFT)
         self.tasks = deepcopy(demo_world.TASKS)
@@ -91,6 +99,9 @@ class PlanningSession:
             "avoid_fix_ids": [],
         }
         self.last_supplier_notes: list[str] = []
+        # Display order for timeline / map (#18) — attention only
+        self.platform_order: list[str] = [a.id for a in self.aircraft]
+        self.platform_group_by_type: bool = True
 
     def apply_router_inputs(self, inputs: dict[str, Any]) -> None:
         """Apply saved CONOPS router inputs before the next plan cycle."""
@@ -134,7 +145,30 @@ class PlanningSession:
             supplier_id=self.supplier_id,
             router_inputs=deepcopy(self.router_inputs),
             available_suppliers=list_suppliers(),
+            nav_source=getattr(self, "nav_source", "fixture"),
+            nav_notes=list(getattr(self, "nav_notes", [])),
+            navaid_count=len(self.navaids),
+            platform_order=list(getattr(self, "platform_order", [a.id for a in self.aircraft])),
+            platform_group_by_type=bool(getattr(self, "platform_group_by_type", True)),
         )
+
+    def set_platform_order(self, order: list[str], *, group_by_type: Optional[bool] = None) -> dict[str, Any]:
+        known = {a.id for a in self.aircraft}
+        cleaned = [aid for aid in order if aid in known]
+        for a in self.aircraft:
+            if a.id not in cleaned:
+                cleaned.append(a.id)
+        self.platform_order = cleaned
+        if group_by_type is not None:
+            self.platform_group_by_type = bool(group_by_type)
+        return {
+            "platform_order": list(self.platform_order),
+            "platform_group_by_type": self.platform_group_by_type,
+        }
+
+    def ordered_aircraft(self):
+        rank = {aid: i for i, aid in enumerate(self.platform_order)}
+        return sorted(self.aircraft, key=lambda a: rank.get(a.id, 999))
 
     def _generate(self, ac, assigned) -> tuple[Route, FuelState, str, list[str]]:
         home = self.airbases[ac.home_base_id]

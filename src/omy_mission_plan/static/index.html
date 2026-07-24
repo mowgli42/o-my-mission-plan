@@ -54,6 +54,13 @@
             <h2 id="map-title" class="panel-title">Demo world · PSAB → Kuwait / Iraq</h2>
             <span id="scenario-badge" class="badge badge-idle">gulf-war-psab-001</span>
           </div>
+          <div class="map-toolbar" role="toolbar" aria-label="Map layers">
+            <label class="toggle"><input type="checkbox" id="tog-costgrid" /> Cost grid</label>
+            <label class="toggle"><input type="checkbox" id="tog-threats" checked /> Threats</label>
+            <label class="toggle"><input type="checkbox" id="tog-routes" checked /> Routes</label>
+            <label class="toggle"><input type="checkbox" id="tog-scrub-ac" checked /> Aircraft on route</label>
+            <span id="nav-source-badge" class="badge badge-idle" title="NAV_SOURCE">nav: fixture</span>
+          </div>
           <div id="status-strip" class="status-strip" aria-live="polite">
             <div class="stat"><span class="stat-label">GO</span><span id="stat-go" class="stat-value go">—</span></div>
             <div class="stat"><span class="stat-label">NO-GO</span><span id="stat-nogo" class="stat-value nogo">—</span></div>
@@ -71,12 +78,20 @@
             <span><i class="strike"></i>Strike</span>
             <span><i class="threat"></i>Threat</span>
             <span><i class="route"></i>Route</span>
+            <span><i class="costgrid"></i>Cost</span>
           </div>
+          <div id="exposure-panel" class="exposure-panel" aria-live="polite"></div>
         </section>
 
         <section class="panel" aria-labelledby="fleet-title">
-          <div class="panel-head"><h2 id="fleet-title" class="panel-title">Aircraft &amp; routes</h2></div>
-          <p class="hint">Select an aircraft, insert a strike, or open the Routes tab after planning.</p>
+          <div class="panel-head">
+            <h2 id="fleet-title" class="panel-title">Aircraft &amp; routes</h2>
+          </div>
+          <div class="fleet-toolbar">
+            <label class="toggle"><input type="checkbox" id="tog-group-type" checked /> Group by type</label>
+            <span class="hint">Reorder with ↑ ↓ — drives timeline / map stack</span>
+          </div>
+          <p class="hint">Select an aircraft, insert a strike, or open Routes after planning.</p>
           <div id="fleet-list" class="list" aria-live="polite"></div>
           <h3 class="panel-title" style="margin-top: 1.25rem">Dynamic insert</h3>
           <form id="insert-form" class="form" autocomplete="off">
@@ -128,7 +143,7 @@
               <thead>
                 <tr>
                   <th>Slot</th>
-                  <th>Emphasis</th>
+                  <th>Archetype</th>
                   <th>GO</th>
                   <th>NO-GO</th>
                   <th>Unalloc</th>
@@ -148,7 +163,12 @@
       <main id="view-routes" class="routes-view view" data-view-panel="routes" hidden>
         <section class="metrics-bar" id="routes-metrics" aria-label="Plan metrics"></section>
 
-        <div class="routes-body">
+        <div class="routes-subtabs" role="tablist" aria-label="Routes views">
+          <button type="button" class="subtab active" data-routes-pane="table" role="tab" aria-selected="true">Table</button>
+          <button type="button" class="subtab" data-routes-pane="timeline" role="tab" aria-selected="false">Aligned timeline</button>
+        </div>
+
+        <div class="routes-body" id="routes-pane-table" data-routes-panel="table">
           <section class="route-threat-panel" aria-label="Generated routes">
             <header>
               <h2>Generated routes</h2>
@@ -182,6 +202,15 @@
             <div id="route-timeline" class="debrief-timeline" aria-label="Mission timeline"></div>
             <div id="route-milestones" class="milestones" aria-label="Key events"></div>
           </aside>
+        </div>
+
+        <div id="routes-pane-timeline" data-routes-panel="timeline" hidden>
+          <div class="timeline-toolbar">
+            <label>Scrub <input type="range" id="timeline-scrub" min="0" max="100" value="0" step="1" /></label>
+            <span id="timeline-scrub-label" class="mono">t = 0m</span>
+            <span class="hint">Shared axis · track order follows platform list</span>
+          </div>
+          <div id="aligned-timeline" class="aligned-timeline" aria-label="Multi-platform TOT timeline"></div>
         </div>
       </main>
 

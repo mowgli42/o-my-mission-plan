@@ -113,7 +113,23 @@ Each Mission Option SHALL persist the inputs used to produce it (at minimum: sup
 
 ### R12 — Comparison
 
-The system SHALL provide comparison metrics across Mission Options including: GO count, NO-GO count, unallocated count, total distance (or equivalent fuel/distance aggregate), emphasis label, and (for synchronized options) timing-alignment indicators when present. Comparison SHALL be advisory for a human planner; the system SHALL NOT automatically select a single best option in the prototype. The planner MAY mark a preferred option for the next experiment or export.
+The system SHALL provide comparison metrics across Mission Options including: GO count, NO-GO count, unallocated count, total distance (or equivalent fuel/distance aggregate), emphasis label, **force-approach archetype**, archetype-fit hint, and (for synchronized options) timing-alignment indicators when present. Comparison SHALL be advisory for a human planner; the system SHALL NOT automatically select a single best option in the prototype. The planner MAY mark a preferred option for the next experiment or export.
+
+### R13 — Force engagement archetypes & contingency pool
+
+Each Mission Option SHALL carry a primary **archetype** (`efficient` | `synchronized` | `maneuver` | `surprise` | `shock` | `attrition`) and optional hybrid tags per `docs/FORCE-APPROACHES.md`. The system SHALL store a contingency **pool** that may exceed three options while supporting exactly three **pinned** slots A/B/C for continuous comparison. The system SHALL expose a rules-only **GapReport** stub (coverage, feasibility, archetype fit, SPF, dependencies, contingency hints) without auto-selecting a best option.
+
+### R14 — Theater navigation sources
+
+The system SHALL load published fixes from fixture data and MAY augment navaids from an X-Plane–style `earth_nav.dat` extract filtered to the theater bbox (`NAV_SOURCE=fixture|xplane`). Routes SHALL remain published-waypoints-only. See `docs/NAV-DATA.md`.
+
+### R15 — Map layers (cost grid, threats, exposure, scrub)
+
+The UI/API SHALL support a toggleable hex cost-grid overlay derived from threat severities, draw threat lethal/jam radii, highlight route legs that threats “see,” and place aircraft markers along routes at a scrubbable mission time. Cost-grid display SHALL NOT by itself change route geometry.
+
+### R16 — Aligned multi-platform timeline & platform list order
+
+The Routes view SHALL provide metrics and an aligned multi-platform timeline (shared time axis, one track per platform, TOT/BDA windows when present). The platform list SHALL support grouping by type and session-persisted manual reorder that drives timeline/map stack order without changing allocation.
 
 ## Non-goals (prototype)
 
