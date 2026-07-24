@@ -104,9 +104,13 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 | GET | `/docs` | Swagger |
 
 Set `ROUTE_SUPPLIER=fallback|openroutefinder|costgrid` to select the lateral path adapter (default `fallback`).
+Set `NAV_SOURCE=fixture|xplane` for theater navaid density (default `fixture`; extract at `data/nav/gulf-earth_nav.dat`).
 
 ### Docs
 
+- [`docs/FORCE-APPROACHES.md`](docs/FORCE-APPROACHES.md) — historical archetypes + gap checklist
+- [`docs/WAYPOINT-AND-ROUTING-MODEL.md`](docs/WAYPOINT-AND-ROUTING-MODEL.md) — unified published fixes vs selection methods
+- [`docs/NAV-DATA.md`](docs/NAV-DATA.md) — fixture vs X-Plane theater extract (`NAV_SOURCE`)
 - [`docs/CONOPS.md`](docs/CONOPS.md) — iterative cycle + top-three Mission Options
 - [`docs/SUPPLIER-ROUTE-TOOLS.md`](docs/SUPPLIER-ROUTE-TOOLS.md) — supplier tool survey + adapter model
 - [`docs/ORF-SPIKE.md`](docs/ORF-SPIKE.md) — openRouteFinder-style PSAB graph spike (#6)

@@ -10,10 +10,22 @@ const state = {
   overview: null,
   options: null,
   compare: null,
+  costgrid: null,
+  exposure: null,
+  timeline: null,
+  scrubMin: 0,
+  positions: null,
   selectedAircraftId: null,
   selectedRouteId: null,
   selectedEventId: null,
+  selectedThreatId: null,
   view: "plan",
+  routesPane: "table",
+  showCostgrid: false,
+  showThreats: true,
+  showRoutes: true,
+  showAircraftOnRoute: true,
+  groupByType: true,
 };
 
 const BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
@@ -126,68 +138,118 @@ function renderTasks() {
     .join("");
 }
 
+function orderedAircraft() {
+  const aircraft = state.world?.aircraft || [];
+  const order = state.world?.platform_order || aircraft.map((a) => a.id);
+  const rank = Object.fromEntries(order.map((id, i) => [id, i]));
+  return [...aircraft].sort((a, b) => (rank[a.id] ?? 999) - (rank[b.id] ?? 999));
+}
+
 function renderFleet() {
   const list = $("#fleet-list");
   const select = $("#insert-aircraft");
-  const aircraft = state.world?.aircraft || [];
+  const aircraft = orderedAircraft();
   const plansById = Object.fromEntries((state.plan?.plans || []).map((p) => [p.aircraft_id, p]));
+  const group = $("#tog-group-type")?.checked ?? state.groupByType;
+  state.groupByType = group;
 
   select.innerHTML = aircraft
     .map((a) => `<option value="${a.id}">${a.label || a.id} (${a.type})</option>`)
     .join("");
   if (state.selectedAircraftId) select.value = state.selectedAircraftId;
 
-  list.innerHTML = aircraft
-    .map((a) => {
-      const plan = plansById[a.id];
-      const status = plan?.status || "idle";
-      const selected = state.selectedAircraftId === a.id ? "selected" : "";
-      const fuelPct =
-        plan?.fuel != null
-          ? Math.max(0, Math.min(100, (plan.fuel.final_fuel / a.initial_fuel) * 100))
-          : null;
-      const low = plan?.fuel && !plan.fuel.feasible;
-      const unsat = (plan?.unsatisfied_task_ids || []).length
-        ? `<div class="reason" role="status">Unsatisfied: ${(plan.unsatisfied_task_ids || []).join(", ")}</div>`
+  const renderCard = (a, idx, arr) => {
+    const plan = plansById[a.id];
+    const status = plan?.status || "idle";
+    const selected = state.selectedAircraftId === a.id ? "selected" : "";
+    const fuelPct =
+      plan?.fuel != null
+        ? Math.max(0, Math.min(100, (plan.fuel.final_fuel / a.initial_fuel) * 100))
+        : null;
+    const low = plan?.fuel && !plan.fuel.feasible;
+    const unsat = (plan?.unsatisfied_task_ids || []).length
+      ? `<div class="reason" role="status">Unsatisfied: ${(plan.unsatisfied_task_ids || []).join(", ")}</div>`
+      : "";
+    const reason =
+      plan?.route?.infeasible_reason || plan?.fuel?.infeasible_reason
+        ? `<div class="reason" role="alert">${plan.route?.infeasible_reason || plan.fuel.infeasible_reason}</div>`
         : "";
-      const reason =
-        plan?.route?.infeasible_reason || plan?.fuel?.infeasible_reason
-          ? `<div class="reason" role="alert">${plan.route?.infeasible_reason || plan.fuel.infeasible_reason}</div>`
-          : "";
-      const tasks = (plan?.assigned_task_ids || []).join(", ") || "none";
-      const dist = plan?.route ? `${plan.route.total_distance_nmi} nmi` : "—";
-      const wps = plan?.route?.waypoints?.map((w) => w.id).join(" → ") || "";
-      const wpn = a.weapons_loadout != null ? ` · wpn ${a.weapons_loadout}` : "";
-      return `
-        <article class="item ${selected}" data-aircraft="${a.id}" tabindex="0" role="button">
-          <div class="item-row"><span class="item-id">${a.label || a.id}</span>${statusBadge(status)}</div>
-          <div class="item-meta">${typeBadge(a.type)} · home ${a.home_base_id} · tasks ${tasks}${wpn}</div>
-          <div class="item-meta">Route ${dist} · burn ${a.burn_rate_per_nmi}/nmi · reserve ${a.reserve_fuel}</div>
-          ${wps ? `<div class="item-meta">Fixes ${wps}</div>` : ""}
-          ${
-            fuelPct != null
-              ? `<div class="fuel-bar ${low ? "low" : ""}"><span style="width:${fuelPct}%"></span></div>
-                 <div class="item-meta">Final fuel ${plan.fuel.final_fuel} / ${a.initial_fuel}</div>`
-              : ""
-          }
-          ${unsat}${reason}
-        </article>`;
-    })
-    .join("");
+    const tasks = (plan?.assigned_task_ids || []).join(", ") || "none";
+    const dist = plan?.route ? `${plan.route.total_distance_nmi} nmi` : "—";
+    const wps = plan?.route?.waypoints?.map((w) => w.id).join(" → ") || "";
+    const wpn = a.weapons_loadout != null ? ` · wpn ${a.weapons_loadout}` : "";
+    return `
+      <article class="item ${selected}" data-aircraft="${a.id}" tabindex="0" role="button">
+        <div class="item-row">
+          <span class="item-id">${a.label || a.id}</span>${statusBadge(status)}
+          <span class="reorder">
+            <button type="button" class="btn-icon" data-move="-1" title="Move up" ${idx === 0 ? "disabled" : ""}>↑</button>
+            <button type="button" class="btn-icon" data-move="1" title="Move down" ${idx === arr.length - 1 ? "disabled" : ""}>↓</button>
+          </span>
+        </div>
+        <div class="item-meta">${typeBadge(a.type)} · home ${a.home_base_id} · tasks ${tasks}${wpn}</div>
+        <div class="item-meta">Route ${dist} · burn ${a.burn_rate_per_nmi}/nmi · reserve ${a.reserve_fuel}</div>
+        ${wps ? `<div class="item-meta">Fixes ${wps}</div>` : ""}
+        ${
+          fuelPct != null
+            ? `<div class="fuel-bar ${low ? "low" : ""}"><span style="width:${fuelPct}%"></span></div>
+               <div class="item-meta">Final fuel ${plan.fuel.final_fuel} / ${a.initial_fuel}</div>`
+            : ""
+        }
+        ${unsat}${reason}
+      </article>`;
+  };
+
+  if (group) {
+    const types = ["ISR", "FIGHTER", "BOMBER"];
+    list.innerHTML = types
+      .map((t) => {
+        const groupAc = aircraft.filter((a) => a.type === t);
+        if (!groupAc.length) return "";
+        return `<div class="fleet-group"><div class="fleet-group-head">${t}</div>${groupAc
+          .map((a, i) => renderCard(a, aircraft.indexOf(a), aircraft))
+          .join("")}</div>`;
+      })
+      .join("");
+  } else {
+    list.innerHTML = aircraft.map((a, i) => renderCard(a, i, aircraft)).join("");
+  }
 
   list.querySelectorAll("[data-aircraft]").forEach((el) => {
     const pick = () => {
       state.selectedAircraftId = el.dataset.aircraft;
       $("#insert-aircraft").value = state.selectedAircraftId;
       renderFleet();
-      renderMap("#map", { showThreats: true });
+      refreshMap();
     };
-    el.addEventListener("click", pick);
+    el.addEventListener("click", (e) => {
+      if (e.target.closest("[data-move]")) return;
+      pick();
+    });
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         pick();
       }
+    });
+    el.querySelectorAll("[data-move]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const delta = Number(btn.dataset.move);
+        const order = orderedAircraft().map((a) => a.id);
+        const idx = order.indexOf(el.dataset.aircraft);
+        const j = idx + delta;
+        if (j < 0 || j >= order.length) return;
+        [order[idx], order[j]] = [order[j], order[idx]];
+        await api("/api/platforms/order", {
+          method: "POST",
+          body: JSON.stringify({ order, group_by_type: state.groupByType }),
+        });
+        state.world = await api("/api/world");
+        renderFleet();
+        if (state.timeline) await loadTimeline();
+        refreshMap();
+      });
     });
   });
 }
@@ -200,6 +262,54 @@ function renderStats() {
   $("#stat-idle").textContent = s ? s.idle : "—";
 }
 
+function costLevelColor(level, intensity) {
+  const alpha = Math.min(0.55, 0.12 + intensity * 0.1);
+  const map = {
+    LOW: `rgba(93, 222, 160, ${alpha})`,
+    MEDIUM: `rgba(240, 193, 74, ${alpha})`,
+    HIGH: `rgba(255, 122, 69, ${alpha})`,
+    CRITICAL: `rgba(255, 92, 108, ${alpha})`,
+  };
+  return map[level] || `rgba(148, 163, 184, ${alpha})`;
+}
+
+function nmToSvgRadius(lat, lon, radiusNmi) {
+  const [x0, y0] = project(lat, lon);
+  const [x1] = project(lat, lon + radiusNmi / (60 * Math.cos((lat * Math.PI) / 180)));
+  return Math.max(4, Math.abs(x1 - x0));
+}
+
+function refreshMap() {
+  renderMap("#map", {
+    showThreats: state.showThreats,
+    showRoutes: state.showRoutes,
+    showCostgrid: state.showCostgrid,
+    showAircraft: state.showAircraftOnRoute,
+  });
+  renderExposurePanel();
+}
+
+function renderExposurePanel() {
+  const host = $("#exposure-panel");
+  if (!host) return;
+  const platforms = state.exposure?.platforms || [];
+  if (!platforms.length) {
+    host.innerHTML = "";
+    return;
+  }
+  const rows = platforms
+    .filter((p) => (p.threats_that_see || []).length)
+    .map((p) => {
+      const sees = (p.threats_that_see || [])
+        .map((t) => `${t.threat_id}(${t.band})`)
+        .join(", ");
+      return `<div><strong>${p.label || p.aircraft_id}</strong> seen by ${sees}</div>`;
+    });
+  host.innerHTML = rows.length
+    ? `<div class="exposure-head">Threats that see platforms (jam/lethal)</div>${rows.join("")}`
+    : `<div class="exposure-head">No jam/lethal exposure on current routes</div>`;
+}
+
 function renderMap(svgSel = "#map", opts = {}) {
   const svg = $(svgSel);
   const w = state.world;
@@ -207,26 +317,55 @@ function renderMap(svgSel = "#map", opts = {}) {
     if (svg) svg.innerHTML = "";
     return;
   }
+  const showThreats = opts.showThreats !== false && state.showThreats !== false;
+  const showRoutes = opts.showRoutes !== false && (opts.route || state.showRoutes !== false);
+  const showCostgrid = opts.showCostgrid ?? state.showCostgrid;
+  const showAircraft = opts.showAircraft ?? state.showAircraftOnRoute;
   const parts = [];
   parts.push(`
     <path d="M80,460 C140,430 180,380 220,300 C260,220 300,160 360,120 C420,80 480,70 540,90 C560,140 550,220 520,280 C490,340 450,400 400,440 C340,480 200,500 80,460 Z"
       fill="rgba(61,214,198,0.04)" stroke="rgba(61,214,198,0.18)" stroke-width="1.5"/>`);
 
-  for (const n of w.navaids || []) {
-    const [x, y] = project(n.location.lat, n.location.lon);
-    parts.push(`<g><circle cx="${x}" cy="${y}" r="3.5" fill="#5c6b7e"/><text x="${x + 6}" y="${y + 3}" fill="#5c6b7e" font-size="9" font-family="IBM Plex Mono, monospace">${n.id}</text></g>`);
+  if (showCostgrid && state.costgrid?.cells?.length) {
+    for (const cell of state.costgrid.cells) {
+      const pts = (cell.vertices || [])
+        .map(([la, lo]) => project(la, lo).join(","))
+        .join(" ");
+      parts.push(
+        `<polygon points="${pts}" fill="${costLevelColor(cell.level, cell.intensity)}" stroke="rgba(0,0,0,0.15)" stroke-width="0.5"/>`,
+      );
+    }
   }
+
+  // Limit navaid labels when dense
+  const navaids = w.navaids || [];
+  const labelEvery = navaids.length > 20 ? 2 : 1;
+  navaids.forEach((n, i) => {
+    const [x, y] = project(n.location.lat, n.location.lon);
+    const label = i % labelEvery === 0
+      ? `<text x="${x + 5}" y="${y + 3}" fill="#5c6b7e" font-size="8" font-family="IBM Plex Mono, monospace">${n.id}</text>`
+      : "";
+    parts.push(`<g><circle cx="${x}" cy="${y}" r="2.5" fill="#5c6b7e"/>${label}</g>`);
+  });
   for (const m of w.mission_waypoints || []) {
     const [x, y] = project(m.location.lat, m.location.lon);
     parts.push(`<g><polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/><text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text></g>`);
   }
-  if (opts.showThreats !== false) {
+  if (showThreats) {
     for (const th of w.threats || []) {
       const loc = th.location || th;
       const lat = loc.lat ?? th.latitude;
       const lon = loc.lon ?? th.longitude;
       const [x, y] = project(lat, lon);
-      parts.push(`<g><circle cx="${x}" cy="${y}" r="6" fill="rgba(239,68,68,0.25)" stroke="#ef4444" stroke-width="1.5"/><text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id || th.kind}</text></g>`);
+      const jamR = nmToSvgRadius(lat, lon, th.jam_radius_nmi || 160);
+      const lethR = nmToSvgRadius(lat, lon, th.lethal_radius_nmi || 50);
+      const sel = state.selectedThreatId === th.id ? 1 : 0.55;
+      parts.push(`<g class="threat-g" data-threat="${th.id}" style="cursor:pointer">
+        <circle cx="${x}" cy="${y}" r="${jamR}" fill="rgba(239,68,68,0.06)" stroke="rgba(239,68,68,${0.35 * sel})" stroke-dasharray="4 3" stroke-width="1"/>
+        <circle cx="${x}" cy="${y}" r="${lethR}" fill="rgba(239,68,68,0.12)" stroke="#ef4444" stroke-width="1.2" opacity="${sel}"/>
+        <circle cx="${x}" cy="${y}" r="5" fill="#ef4444"/>
+        <text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}</text>
+      </g>`);
     }
   }
   for (const b of w.airbases || []) {
@@ -244,43 +383,76 @@ function renderMap(svgSel = "#map", opts = {}) {
     ? [opts.route]
     : (state.plan?.plans || []).filter((p) => p.route?.waypoints?.length);
 
-  for (const p of routeSource) {
-    const route = p.route || p;
-    const wps = route.waypoints || [];
-    if (!wps.length) continue;
-    const selected =
-      opts.forceSelected ||
-      !state.selectedAircraftId ||
-      p.aircraft_id === state.selectedAircraftId ||
-      p.route_name;
-    const pts = wps
-      .map((wp) => project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon).join(","))
-      .join(" ");
-    const nogo = (p.status || "") === "NO-GO";
-    const cls = nogo ? "route-path nogo" : "route-path";
-    const opacity = selected ? 0.95 : 0.25;
-    const width = selected ? 2.5 : 1.5;
-    // Colored segments if provided
-    if (opts.segments?.length) {
-      for (const seg of opts.segments) {
-        const a = wps[seg.index];
-        const b = wps[seg.index + 1];
-        if (!a || !b) continue;
-        const [x1, y1] = project(a.lat ?? a.location?.lat, a.lon ?? a.location?.lon);
-        const [x2, y2] = project(b.lat ?? b.location?.lat, b.lon ?? b.location?.lon);
-        parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${seg.color}" stroke-width="3" opacity="0.9"/>`);
+  const exposureByAc = Object.fromEntries(
+    (state.exposure?.platforms || []).map((p) => [p.aircraft_id, p]),
+  );
+
+  if (showRoutes) {
+    for (const p of routeSource) {
+      const route = p.route || p;
+      const wps = route.waypoints || [];
+      if (!wps.length) continue;
+      const selected =
+        opts.forceSelected ||
+        !state.selectedAircraftId ||
+        p.aircraft_id === state.selectedAircraftId ||
+        p.route_name;
+      const nogo = (p.status || "") === "NO-GO";
+      const opacity = selected ? 0.95 : 0.28;
+      const width = selected ? 2.5 : 1.5;
+      const exp = exposureByAc[p.aircraft_id];
+      if (exp?.legs?.length) {
+        for (const leg of exp.legs) {
+          const a = wps[leg.leg_index];
+          const b = wps[leg.leg_index + 1];
+          if (!a || !b) continue;
+          const [x1, y1] = project(a.lat ?? a.location?.lat, a.lon ?? a.location?.lon);
+          const [x2, y2] = project(b.lat ?? b.location?.lat, b.lon ?? b.location?.lon);
+          const lethal = (leg.threats || []).some((t) => t.band === "LETHAL");
+          const stroke = leg.exposed ? (lethal ? "#ff5c6c" : "#f0c14a") : nogo ? "#ff5c6c" : "#3dd6c6";
+          parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${width}" opacity="${opacity}"/>`);
+        }
+      } else {
+        const pts = wps
+          .map((wp) => project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon).join(","))
+          .join(" ");
+        parts.push(`<polyline class="route-path" points="${pts}" opacity="${opacity}" stroke-width="${width}" stroke="${nogo ? "#ff5c6c" : "#3dd6c6"}" fill="none"/>`);
       }
-    } else {
-      parts.push(`<polyline class="${cls}" points="${pts}" opacity="${opacity}" stroke-width="${width}"/>`);
-    }
-    if (selected) {
-      for (const wp of wps) {
-        const [x, y] = project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon);
-        parts.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="${nogo ? "#ff5c6c" : "#3dd6c6"}"/>`);
+      if (selected) {
+        for (const wp of wps) {
+          const [x, y] = project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon);
+          parts.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="${nogo ? "#ff5c6c" : "#3dd6c6"}"/>`);
+        }
       }
     }
   }
+
+  if (showAircraft && state.positions?.positions) {
+    for (const pos of state.positions.positions) {
+      if (!pos.position) continue;
+      const [x, y] = project(pos.position.lat, pos.position.lon);
+      const color =
+        pos.aircraft_type === "ISR" ? "#4da3ff" : pos.aircraft_type === "BOMBER" ? "#9b7fd4" : "#c9a227";
+      parts.push(`<g>
+        <circle cx="${x}" cy="${y}" r="7" fill="${color}" stroke="#0b1220" stroke-width="2"/>
+        <text x="${x + 9}" y="${y - 6}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${pos.label || pos.aircraft_id}</text>
+      </g>`);
+    }
+  }
+
   svg.innerHTML = parts.join("");
+  svg.querySelectorAll("[data-threat]").forEach((el) => {
+    el.addEventListener("click", () => {
+      state.selectedThreatId = el.dataset.threat;
+      const th = (state.world?.threats || []).find((t) => t.id === state.selectedThreatId);
+      if (th) {
+        toast(
+          `${th.id} · ${th.kind} · ${th.severity} · lethal ${th.lethal_radius_nmi}nm / jam ${th.jam_radius_nmi}nm`,
+        );
+      }
+      refreshMap();
+    });
+  });
 }
 
 /* ---------- Routes overview ---------- */
@@ -588,6 +760,127 @@ function emphasisLabel(e) {
   return e || "—";
 }
 
+function archetypeLabel(a) {
+  const map = {
+    efficient: "Efficient",
+    synchronized: "Synchronized",
+    maneuver: "Maneuver",
+    surprise: "Surprise",
+    shock: "Shock",
+    attrition: "Attrition",
+  };
+  return map[a] || a || "—";
+}
+
+async function loadCostgrid() {
+  if (!state.showCostgrid) return;
+  state.costgrid = await api("/api/map/costgrid?cell_nmi=45");
+}
+
+async function loadExposure() {
+  if (!state.plan && !state.compare?.preferred_option_id) {
+    state.exposure = null;
+    return;
+  }
+  const pref = state.compare?.preferred_option_id;
+  const q = pref ? `?option_id=${pref}` : "";
+  try {
+    state.exposure = await api(`/api/map/exposure${q}`);
+  } catch {
+    state.exposure = null;
+  }
+}
+
+async function loadTimeline() {
+  const pref = state.compare?.preferred_option_id;
+  const q = pref ? `?option_id=${pref}` : "";
+  try {
+    state.timeline = await api(`/api/timeline${q}`);
+    const scrub = $("#timeline-scrub");
+    if (scrub && state.timeline) {
+      scrub.max = Math.max(1, Math.ceil(state.timeline.axis_max_minutes || 1));
+      scrub.value = Math.min(Number(scrub.value), Number(scrub.max));
+    }
+    renderAlignedTimeline();
+  } catch {
+    state.timeline = null;
+  }
+}
+
+async function loadPositions() {
+  if (!state.showAircraftOnRoute) {
+    state.positions = null;
+    return;
+  }
+  const pref = state.compare?.preferred_option_id;
+  const q = new URLSearchParams({ t_min: String(state.scrubMin || 0) });
+  if (pref) q.set("option_id", pref);
+  try {
+    state.positions = await api(`/api/map/positions?${q}`);
+  } catch {
+    state.positions = null;
+  }
+}
+
+function renderAlignedTimeline() {
+  const host = $("#aligned-timeline");
+  if (!host) return;
+  const tl = state.timeline;
+  if (!tl?.tracks?.length) {
+    host.innerHTML = `<p class="hint">Run a plan or build options to see aligned TOT tracks.</p>`;
+    return;
+  }
+  const maxT = Math.max(1, tl.axis_max_minutes || 1);
+  const windows = (tl.sync_windows || [])
+    .map((w) => {
+      const left = (w.t0 / maxT) * 100;
+      const width = ((w.t1 - w.t0) / maxT) * 100;
+      return `<div class="tot-window ${w.kind}" style="left:${left}%;width:${width}%" title="${w.label}"></div>`;
+    })
+    .join("");
+  const playhead = `<div class="playhead" style="left:${(state.scrubMin / maxT) * 100}%"></div>`;
+  host.innerHTML = `
+    <div class="tl-axis"><span>0m</span><span>${maxT.toFixed(0)}m</span></div>
+    <div class="tl-tracks">
+      ${tl.tracks
+        .map((tr) => {
+          const segs = (tr.segments || [])
+            .map((s) => {
+              const left = (s.t0 / maxT) * 100;
+              const width = Math.max(0.4, ((s.t1 - s.t0) / maxT) * 100);
+              return `<div class="tl-seg" style="left:${left}%;width:${width}%" title="${s.from_id}→${s.to_id}"></div>`;
+            })
+            .join("");
+          const marks = (tr.events || [])
+            .filter((e) => e.kind === "strike" || e.kind === "collect")
+            .map((e) => {
+              const left = (e.t_min / maxT) * 100;
+              const cls = e.kind === "strike" ? "strike" : "collect";
+              return `<div class="tl-mark ${cls}" style="left:${left}%" title="${e.label}"></div>`;
+            })
+            .join("");
+          return `<div class="tl-row">
+            <div class="tl-label">${tr.label || tr.aircraft_id}<div class="item-meta">${tr.aircraft_type} · ${tr.status} · ${tr.total_distance_nmi || 0} nmi</div></div>
+            <div class="tl-track">${windows}${segs}${marks}${playhead}</div>
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+}
+
+function setRoutesPane(name) {
+  state.routesPane = name;
+  $$(".subtab").forEach((t) => {
+    const on = t.dataset.routesPane === name;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  $$("[data-routes-panel]").forEach((p) => {
+    p.hidden = p.dataset.routesPanel !== name;
+  });
+  if (name === "timeline") loadTimeline();
+}
+
 function renderOptionCards() {
   const host = $("#option-cards");
   if (!host) return;
@@ -627,21 +920,24 @@ function renderOptionCards() {
         syncHtml = `<div class="sync-chip ${cls}">sync ${sync.timing_alignment} · ΔTOT ${sync.tot_spread_minutes}m · BDA lag ${sync.bda_lag_minutes}m${bda}</div>`;
       }
       const vias = (opt.vias || opt.router_inputs?.vias || []).join(" → ") || "—";
+      const arch = opt.archetype || opt.emphasis;
       return `
         <article class="option-card ${opt.preferred ? "preferred" : ""}" data-emphasis="${opt.emphasis}" data-option="${opt.option_id}">
           <div class="slot-mark">SLOT ${slot}${opt.preferred ? " · PREFERRED" : ""}</div>
           <h3>${opt.label}</h3>
-          <p class="meta">${emphasisLabel(opt.emphasis)} · supplier ${opt.supplier_id || "fallback"} · vias ${vias}</p>
+          <p class="meta">${archetypeLabel(arch)} · ${emphasisLabel(opt.emphasis)} · ${opt.supplier_id || "fallback"} · vias ${vias}</p>
           <div class="option-metrics">
             <div class="om"><span>GO</span><strong class="go">${opt.go_count}</strong></div>
             <div class="om"><span>NO-GO</span><strong class="nogo">${opt.nogo_count}</strong></div>
             <div class="om"><span>Unallocated</span><strong>${opt.unallocated_count}</strong></div>
             <div class="om"><span>Distance</span><strong>${Number(opt.total_distance_nmi).toFixed(0)} nmi</strong></div>
           </div>
+          ${opt.archetype_fit ? `<div class="sync-chip">${opt.archetype_fit}</div>` : ""}
           ${syncHtml}
           <div class="card-actions">
             <button type="button" class="btn btn-primary btn-prefer" data-prefer="${opt.option_id}">Prefer</button>
             <button type="button" class="btn btn-export-option" data-export-option="${opt.option_id}">Export</button>
+            <button type="button" class="btn btn-ghost" data-gaps="${opt.option_id}">Gaps</button>
           </div>
         </article>`;
     })
@@ -653,6 +949,18 @@ function renderOptionCards() {
   host.querySelectorAll("[data-export-option]").forEach((btn) => {
     btn.addEventListener("click", () => exportRoutes(btn.dataset.exportOption));
   });
+  host.querySelectorAll("[data-gaps]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        const g = await api(`/api/options/${btn.dataset.gaps}/gaps`);
+        const n = (g.gaps || []).length;
+        const r = (g.risks || []).length;
+        toast(`GapReport · ${g.archetype} · ${n} gaps · ${r} risks (advisory)`, n ? "warn" : "info");
+      } catch (err) {
+        toast(String(err.message || err), "error");
+      }
+    });
+  });
 }
 
 function renderCompareTable() {
@@ -660,7 +968,7 @@ function renderCompareTable() {
   if (!tbody) return;
   const rows = state.compare?.options || [];
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="hint">Build the top-three to populate comparison.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="hint">Build the top-three to populate comparison. Pool may hold more contingencies.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows
@@ -672,8 +980,8 @@ function renderCompareTable() {
           : "—";
       return `
         <tr class="${o.preferred ? "preferred-row" : ""}" data-option="${o.option_id}">
-          <td>${o.slot || "—"}</td>
-          <td>${emphasisLabel(o.emphasis)}</td>
+          <td>${o.slot || "pool"}</td>
+          <td>${archetypeLabel(o.archetype || o.emphasis)}<div class="item-meta">${o.archetype_fit || ""}</div></td>
           <td>${o.go_count}</td>
           <td>${o.nogo_count}</td>
           <td>${o.unallocated_count}</td>
@@ -753,13 +1061,22 @@ async function loadWorld() {
     const badge = $("#scenario-badge");
     if (badge) badge.textContent = state.world.scenario_id;
   }
+  const navBadge = $("#nav-source-badge");
+  if (navBadge) {
+    navBadge.textContent = `nav: ${state.world.nav_source || "fixture"} · ${state.world.navaid_count || 0} fixes`;
+  }
   if (!state.selectedAircraftId && state.world.aircraft.length) {
     state.selectedAircraftId = state.world.aircraft[0].id;
   }
+  state.groupByType = state.world.platform_group_by_type !== false;
+  if ($("#tog-group-type")) $("#tog-group-type").checked = state.groupByType;
   renderTasks();
   renderFleet();
   renderStats();
-  renderMap("#map", { showThreats: true });
+  await loadCostgrid();
+  await loadExposure();
+  await loadPositions();
+  refreshMap();
 }
 
 async function loadOverview() {
@@ -851,7 +1168,9 @@ async function insertTask(fromForm = true) {
     renderTasks();
     renderFleet();
     renderStats();
-    renderMap("#map", { showThreats: true });
+    await loadExposure();
+    await loadPositions();
+    refreshMap();
     toast(`${planned.aircraft_id} re-assessed → ${planned.status}`, planned.status === "NO-GO" ? "warn" : "info");
   } catch (err) {
     toast(String(err.message || err), "error");
@@ -875,7 +1194,48 @@ function wire() {
   $("#insert-aircraft").addEventListener("change", (e) => {
     state.selectedAircraftId = e.target.value;
     renderFleet();
-    renderMap("#map", { showThreats: true });
+    refreshMap();
+  });
+  $("#tog-costgrid")?.addEventListener("change", async (e) => {
+    state.showCostgrid = e.target.checked;
+    if (state.showCostgrid) await loadCostgrid();
+    refreshMap();
+  });
+  $("#tog-threats")?.addEventListener("change", (e) => {
+    state.showThreats = e.target.checked;
+    refreshMap();
+  });
+  $("#tog-routes")?.addEventListener("change", (e) => {
+    state.showRoutes = e.target.checked;
+    refreshMap();
+  });
+  $("#tog-scrub-ac")?.addEventListener("change", async (e) => {
+    state.showAircraftOnRoute = e.target.checked;
+    await loadPositions();
+    refreshMap();
+  });
+  $("#tog-group-type")?.addEventListener("change", async (e) => {
+    state.groupByType = e.target.checked;
+    await api("/api/platforms/order", {
+      method: "POST",
+      body: JSON.stringify({
+        order: orderedAircraft().map((a) => a.id),
+        group_by_type: state.groupByType,
+      }),
+    });
+    state.world = await api("/api/world");
+    renderFleet();
+  });
+  $$(".subtab").forEach((t) => {
+    t.addEventListener("click", () => setRoutesPane(t.dataset.routesPane));
+  });
+  $("#timeline-scrub")?.addEventListener("input", async (e) => {
+    state.scrubMin = Number(e.target.value);
+    const lab = $("#timeline-scrub-label");
+    if (lab) lab.textContent = `t = ${state.scrubMin}m`;
+    await loadPositions();
+    renderAlignedTimeline();
+    refreshMap();
   });
   $$(".tab").forEach((t) => {
     t.addEventListener("click", () => {
@@ -883,6 +1243,10 @@ function wire() {
       setView(t.dataset.view);
       if (t.dataset.view === "options") {
         loadOptions().catch((err) => toast(String(err.message || err), "error"));
+      }
+      if (t.dataset.view === "routes") {
+        loadTimeline().catch(() => {});
+        loadExposure().then(() => refreshMap());
       }
     });
   });

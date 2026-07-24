@@ -95,3 +95,22 @@ Feature: o-my Mission Planning
     When the planner requests a comparison
     Then the result includes per-option GO count, NO-GO count, unallocated count, total distance, and emphasis label
     And the planner can record which option is preferred for the next experiment or export
+
+  # --- Force approaches + pool / UI layers ---
+
+  Scenario: Mission Option carries force-approach archetype
+    When the planner creates an option with archetype maneuver
+    Then the option stores archetype maneuver with saved router inputs
+    And comparison includes the archetype label and an archetype-fit hint
+
+  Scenario: Contingency pool exceeds the pinned top-three
+    Given Mission Options pinned to slots A, B, and C
+    When the planner adds a shock contingency to the pool without a slot
+    Then the pool size is greater than three
+    And exactly three options remain pinned for comparison
+
+  Scenario: Gap report is advisory and archetype-aware
+    Given a saved Mission Option
+    When the planner requests a gap report for that option
+    Then the report lists gaps risks and dependency stubs
+    And the report does not select a best option automatically

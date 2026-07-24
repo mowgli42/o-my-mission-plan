@@ -25,6 +25,10 @@ async function shot(name) {
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForSelector(".brand-mark");
 await page.waitForTimeout(700);
+
+// Cost grid + threats on plan map
+await page.check("#tog-costgrid");
+await page.waitForTimeout(500);
 await shot("01-plan-psab-world");
 
 // CONOPS Options showcase
@@ -33,7 +37,6 @@ await page.waitForTimeout(400);
 await page.click("#btn-top-three");
 await page.waitForSelector(".option-card:not(.empty)");
 await page.waitForTimeout(1200);
-// Prefer slot A for export story
 const prefer = page.locator(".option-card .btn-prefer").first();
 if (await prefer.count()) {
   await prefer.click();
@@ -46,11 +49,16 @@ await page.waitForTimeout(800);
 await page.waitForSelector("#routes-tbody tr[data-route]");
 await shot("03-routes-overview-metrics");
 
+// Aligned timeline
+await page.click('.subtab[data-routes-pane="timeline"]');
+await page.waitForTimeout(800);
+await shot("04-aligned-timeline");
+
+await page.click('.subtab[data-routes-pane="table"]');
+await page.waitForTimeout(300);
 const rows = page.locator("#routes-tbody tr[data-route]");
 await rows.first().click();
-await page.waitForTimeout(500);
-await shot("04-route-timeline-events");
-
+await page.waitForTimeout(400);
 await page.click("#btn-more-details");
 await page.waitForTimeout(800);
 await page.waitForSelector("#details-drawer:not([hidden])");
