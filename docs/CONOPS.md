@@ -2,14 +2,16 @@
 
 ## Purpose
 
-Mission planning is an **iterative “guess-and-see” cycle**. The planner does not produce a single definitive route on the first pass. Instead the system supports generating, saving, comparing, and refining multiple planning options until the commander accepts a set that balances efficiency, synchronized effects, and operational surprise.
+Mission planning is an **iterative “guess-and-see” cycle**. The planner does not produce a single definitive route on the first pass. Instead the system supports generating, saving, comparing, and refining multiple planning options until the commander accepts a set that balances economy of force, synchronized effects, and operational surprise/maneuver.
+
+Options are not only different geometries. They embody different **force engagement approaches** (efficient, synchronized, maneuver/surprise, and optional shock or attrition contingencies). See **`docs/FORCE-APPROACHES.md`** for historical anchors, objectives, and guidelines for each archetype.
 
 This CONOPS defines:
 
 1. The planning cycle and how progress is tracked
-2. The **top-three mission option set** the planner keeps visible
-3. How router inputs are persisted so options can be re-run and compared
-4. How comparison drives the next iteration
+2. The **top-three mission option set** (pinned comparison slots) plus a larger contingency pool
+3. How router inputs and **approach archetype** are persisted
+4. How comparison and (later) gap/risk assessment drive the next iteration
 
 Demo theater for the prototype: launch from **OEPS (Prince Sultan AB / PSAB)** into Kuwait / Iraq task areas (see current Gherkin). The same cycle applies to any theater once the navigation database and task pool are swapped.
 
@@ -23,8 +25,9 @@ Demo theater for the prototype: launch from **OEPS (Prince Sultan AB / PSAB)** i
 └──────┬───────┘
        ▼
 ┌──────────────┐
-│ 1. Frame     │  Select objective emphasis for this pass
-│              │  (efficient | synchronized | unexpected-axis)
+│ 1. Frame     │  Select approach archetype + emphasis for this pass
+│              │  (efficient | synchronized | unexpected-axis/maneuver |
+│              │   shock | attrition | …)
 └──────┬───────┘
        ▼
 ┌──────────────┐
@@ -33,7 +36,7 @@ Demo theater for the prototype: launch from **OEPS (Prince Sultan AB / PSAB)** i
        ▼
 ┌──────────────┐
 │ 3. Route     │  Supplier or fallback builds published-waypoint routes
-│              │  (router inputs saved with the option)
+│              │  (router inputs + archetype saved with the option)
 └──────┬───────┘
        ▼
 ┌──────────────┐
@@ -41,99 +44,110 @@ Demo theater for the prototype: launch from **OEPS (Prince Sultan AB / PSAB)** i
 └──────┬───────┘
        ▼
 ┌──────────────┐
-│ 5. Compare   │  Score / side-by-side vs other saved options
+│ 5. Compare   │  Side-by-side vs pinned slots; optional gap/risk hints
 └──────┬───────┘
        ▼
 ┌──────────────┐
-│ 6. Decide    │  Keep / refine / discard; optionally inject new task
-│              │  and re-enter at step 2 or 3
+│ 6. Decide    │  Keep / refine / discard / pin; add contingency;
+│              │  inject task and re-enter at step 2 or 3
 └──────────────┘
 ```
 
-Each completed pass produces a **Mission Option** that is stored and remains available for comparison. Progress is the set of options under consideration plus their GO/NO-GO and comparison scores—not a single boolean “plan complete.”
+Each completed pass produces a **Mission Option** stored in the contingency pool. Progress is the quality of the **pinned top-three** plus credible contingencies for identified risks—not a single “plan complete” flag.
 
 ---
 
-## 2. Top-three mission options (always retained)
+## 2. Top-three slots and contingency pool
 
-The planner maintains up to **three named options** as the working set. They are not mutually exclusive aircraft assignments; they are alternative holistic plans for the same (or largely overlapping) task pool so the planner can trade off different operational intents.
+```text
+Contingency pool (many options, each with archetype + saved inputs)
+        │ pin
+   ┌────┼────┐
+   ▼    ▼    ▼
+  A     B     C     ← always-visible comparison set
+```
 
-| Slot | Name | Intent | Typical router bias |
-|------|------|--------|---------------------|
-| **A** | Efficient | Minimize total distance / fuel / time while still covering assigned tasks | Direct-ish published-waypoint sequences; shortest feasible paths; few extra vias |
-| **B** | Synchronized effects | Time-align strikes, sequence BDA/collection after strike, support simultaneous or staggered effects | Shared timing windows, common IP/hold points, ISR routed to observe post-strike; may accept longer legs |
-| **C** | Unexpected axis | Approach from a non-obvious direction (e.g. not straight from PSAB to target, but north via Jordan then east/west into the target area) | Forced vias / corridor constraints that encode the desired axis; cost or hard constraints on the “obvious” corridor |
+### Default pinned trio
 
-Example of C (narrative): instead of a direct PSAB → target radial, the route climbs north toward a Jordan corridor and enters the target area from the west so the approach axis is not the one the adversary expects from the main operating base.
+| Slot | Default archetype | Intent | Typical router bias |
+|------|-------------------|--------|---------------------|
+| **A** | `efficient` | Economy of force — cover tasks with least fuel/time | Direct-ish published-waypoint sequences; few extra vias |
+| **B** | `synchronized` | Timed combined effects — TOT alignment, BDA after strike | Shared holds/IPs, timing windows; may accept longer legs |
+| **C** | `maneuver` / unexpected axis (+ surprise) | Dislocate — non-obvious approach axis | Forced vias / corridor constraints (e.g. north then west entry vs direct from PSAB) |
 
-The UI and API should always expose these three slots (populated or empty) so the planner can see “what we have so far” for each intent.
+Slots can be re-pinned to other archetypes (`shock`, `attrition`, hybrids). Historical rationale, objectives, and “gaps to hunt” for each archetype: **`docs/FORCE-APPROACHES.md`**.
+
+### Contingencies beyond three
+
+The pool may hold weather alternates, “corridor closed” branches, pure shock opening packages, resilience-heavy attrition plans, etc. Only three stay in continuous side-by-side comparison; the rest remain available to promote into a slot or to satisfy gap-assessment hints (“you have no resilient branch if C is denied”).
 
 ---
 
-## 3. Saved router inputs (iterative planning)
+## 3. Saved router inputs and archetype (iterative planning)
 
-Every Mission Option stores the **inputs that produced it**, not only the resulting routes:
+Every Mission Option stores:
 
-- Task set (ids) considered for this option
-- Aircraft set and home bases
-- Objective emphasis (efficient | synchronized | unexpected-axis)
-- Supplier id / mode (`fallback` | `openroutefinder` | `costgrid` | …)
-- Router parameters: optional vias, corridor / avoid polygons, timing windows (for synchronized), approach-axis constraints (for unexpected)
-- Timestamp and human label
+- **Approach archetype** (`efficient` | `synchronized` | `maneuver` | `surprise` | `shock` | `attrition` | hybrid tags)
+- Task set and aircraft set
+- Supplier id / mode
+- Router parameters: vias, corridor/avoid polygons, timing windows, axis profile, sync group / BDA lag
+- Human label and optional dislocation/deception hypothesis (especially for C)
+- Timestamp; optional `parent_option_id` when refined from another option
 
-Re-running an option with a small parameter change (new via, tighter timing, extra avoid zone) must be possible without rebuilding the entire world state from scratch. Dynamic task insertion still forces full re-generation for the affected aircraft inside the option being edited.
+Re-run with a patched input without rebuilding the world. Dynamic task insertion re-generates the affected aircraft inside the option being edited, preserving archetype and other inputs.
 
 ---
 
 ## 4. Comparison method
 
-Comparison is deliberately lightweight in the prototype and can grow:
-
-| Dimension | Efficient (A) | Synchronized (B) | Unexpected (C) |
-|-----------|---------------|------------------|----------------|
+| Dimension | Efficient (A) | Synchronized (B) | Unexpected / maneuver (C) |
+|-----------|---------------|------------------|---------------------------|
 | Total distance / fuel | Primary | Secondary | Secondary |
-| End-fuel margin (vs reserve) | Required GO | Required GO | Required GO |
+| End-fuel margin | Required GO | Required GO | Required GO |
 | Unallocated / unsatisfied tasks | Count + list | Count + list | Count + list |
-| Timing alignment (strike TOTs, BDA lag) | N/A or weak | Primary | N/A or weak |
-| Approach-axis / corridor match | N/A | N/A | Primary |
-| Qualitative notes | Free text | Free text | Free text |
+| Timing alignment (TOT, BDA lag) | Weak | Primary | Weak |
+| Approach-axis / corridor match | Weak | Weak | Primary |
+| Archetype fit (does plan match its label?) | Yes | Yes | Yes |
+| Qualitative notes / hypothesis | Free text | Free text | Free text |
 
-Minimum viable comparison for the prototype:
+Minimum viable comparison:
 
-- Side-by-side table: per-option GO/NO-GO counts, total distance, unallocated count, one-line intent label
-- Ability to pin/unpin an option into a slot (A/B/C)
-- Ability to duplicate an option, change one router input, and re-propagate for a new candidate
+- Side-by-side: GO/NO-GO counts, total distance, unallocated count, archetype/emphasis label
+- Pin/unpin into A/B/C
+- Duplicate → patch one input → re-propagate
 
-No multi-objective solver is required in v1; the human planner remains in the loop.
+Later: archetype-aware **gap/risk/dependency** reports per `FORCE-APPROACHES.md` §5 (AI or rules). Human remains decision authority.
 
 ---
 
 ## 5. Relationship to civil vs mission route generation
 
-- **Civil-style generation** (published airways/waypoints, Dijkstra over nav graph — e.g. openRouteFinder) is the default engine behind **Efficient (A)** and a building block for the others.
-- **Mission route generation** adds constraints the civil graph does not know: task proximity, synchronized timing, forced approach axes, threat/avoid regions. Those constraints are expressed as router inputs (vias, corridors, windows) and may be satisfied by a cost-grid supplier or by constrained use of the civil supplier.
-- Fuel feasibility always stays in the **Route Propagation Service** after the lateral path is chosen.
+- **Civil-style generation** supports **efficient** and as a base layer for others.
+- **Mission route generation** adds vias, corridors, sync metadata, avoid regions for maneuver/synchronized/shock flavors.
+- Fuel feasibility always stays in the **Route Propagation Service**.
 
-See `docs/CIVIL-ROUTE-DEV-GUIDE.md`, `docs/MISSION-ROUTE-DEV-GUIDE.md`, and `docs/SUPPLIER-ROUTE-TOOLS.md`.
+See `docs/CIVIL-ROUTE-DEV-GUIDE.md`, `docs/MISSION-ROUTE-DEV-GUIDE.md`, `docs/SUPPLIER-ROUTE-TOOLS.md`, `docs/FORCE-APPROACHES.md`.
 
 ---
 
 ## 6. Progress tracking
 
-A planning session is “progressing” when:
+A session is progressing when:
 
-1. At least one option exists in a top-three slot with GO routes for the critical tasks, or
-2. The planner has explicitly compared ≥2 options and recorded a preference / next experiment, or
-3. Unallocated / unsatisfied tasks are shrinking across successive iterations, or
-4. A dynamic insert has been absorbed into an option and re-validated.
+1. Pinned slots include GO routes for critical tasks, or
+2. ≥2 options have been compared and a preference / next experiment recorded, or
+3. Unallocated/unsatisfied tasks shrink across iterations, or
+4. A dynamic insert was absorbed and re-validated, or
+5. Identified gaps have a contingency in the pool or an explicit accept-risk note
 
-Export to o-my-sim / UCI only occurs for routes the planner has marked accepted from a chosen option (typically after comparison).
+Export to o-my-sim / UCI only for routes accepted from a chosen option.
 
 ---
 
 ## 7. Non-goals for the CONOPS prototype
 
-- Fully automated selection of the “best” of the three options
+- Fully automated selection of the “best” option
 - Perfect multi-ship deconfliction or tanker planning
-- Real-time re-planning under live threat tracks (future supplier)
-- Replacing human judgment on synchronized effects or deception axes
+- Real-time re-planning under live threat tracks
+- Replacing commander’s intent with archetype labels alone
+- Encoding full doctrine or ROE
