@@ -18,6 +18,116 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 
 ---
 
+## Screenshots
+
+### 1. Plan tab — cost grid + threats
+
+![Plan PSAB world](docs/screenshots/01-plan-psab-world.png)
+
+### 2. Options tab — force archetypes A/B/C
+
+![Options top-three](docs/screenshots/02-options-top-three.png)
+
+### 3. Routes overview — metrics + table
+
+![Routes overview](docs/screenshots/03-routes-overview-metrics.png)
+
+### 4. Aligned multi-platform timeline (TOT)
+
+![Aligned timeline](docs/screenshots/04-aligned-timeline.png)
+
+### 5. More details — map, threats, task breakout
+
+![Route details](docs/screenshots/05-route-details-map-threats.png)
+
+---
+
+## Architecture
+
+FastAPI serves the planning API and static UI. The core stays small: allocate →
+route (pluggable supplier) → fuel-propagate → export GO routes for o-my-sim.
+Deeper contracts live in [`docs/INTEGRATION-GUIDE.md`](docs/INTEGRATION-GUIDE.md)
+and [`docs/CONOPS.md`](docs/CONOPS.md).
+
+```mermaid
+flowchart LR
+  UI[Static planning UI]
+  API[FastAPI app]
+  Alloc[Allocator]
+  Sup[Route suppliers<br/>fallback / ORF / cost-grid]
+  Prop[Route Propagation Service<br/>fuel + GO/NO-GO]
+  Opt[Mission Options A/B/C]
+  Exp[Route export JSON]
+  Sim[o-my-sim<br/>uci.route on launch]
+
+  UI --> API
+  API --> Alloc
+  Alloc --> Sup
+  Sup --> Prop
+  Prop --> Opt
+  Opt --> Exp
+  Exp --> Sim
+```
+
+---
+
+## Sequence — primary plan cycle
+
+```mermaid
+sequenceDiagram
+  actor Planner
+  participant UI as Planning UI
+  participant API as FastAPI
+  participant Alloc as Allocator
+  participant Sup as Route supplier
+  participant Prop as Propagator
+  participant Exp as Export
+  participant Sim as o-my-sim
+
+  Planner->>UI: Run plan cycle (P)
+  UI->>API: POST /api/plan
+  API->>Alloc: Group tasks by region → aircraft
+  Alloc->>Sup: Build published-waypoint routes
+  Sup->>Prop: Fuel + reserve per leg
+  Prop-->>API: GO / NO-GO + unallocated
+  API-->>UI: Plan result
+  Planner->>UI: Export for o-my-sim (E)
+  UI->>API: POST /api/routes/export
+  API->>Exp: Write GO routes JSON
+  Exp-->>Sim: Import bundle (uci.route on launch)
+```
+
+---
+
+## Remaining / planned
+
+Prototype capabilities above are implemented for the PSAB demo. Still open or
+intentionally external:
+
+- Force-approach archetypes, contingency pool, gap-assessment hooks ([#13](https://github.com/mowgli42/o-my-mission-plan/issues/13))
+- Richer nav density via X-Plane theater extract ([#14](https://github.com/mowgli42/o-my-mission-plan/issues/14))
+- UI polish: cost-grid threats, map position, TOT timeline, platform reorder ([#15](https://github.com/mowgli42/o-my-mission-plan/issues/15)–[#18](https://github.com/mowgli42/o-my-mission-plan/issues/18))
+- Full ATO parsing, advanced allocation, loadouts, multi-ship deconfliction — external suppliers via UCI (not in this repo)
+
+---
+
+## Quick start
+
+```bash
+python3 -m pip install -e ".[test]"
+make demo
+# open http://localhost:8000
+# API docs: http://localhost:8000/docs
+```
+
+1. **Run plan cycle** (or press `P`)
+2. **Export for o-my-sim** (or press `E`) → writes `data/routes/gulf-war-psab-001-routes-latest.json`
+3. Point o-my-sim at that file; it publishes each GO route on launch
+
+Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset · **1**/**2** Plan/Routes · **?** help.
+
+---
+
 ## Status
 
 **Functional prototype implemented** (scenario: `gulf-war-psab-001`).
@@ -40,23 +150,6 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 | CONOPS Mission Options A/B/C + compare / re-run | Done |
 | Options UI (top-three showcase) | Done |
 | Unit / API tests | Done (`make test`) |
-
----
-
-## Quick start
-
-```bash
-python3 -m pip install -e ".[test]"
-make demo
-# open http://localhost:8000
-# API docs: http://localhost:8000/docs
-```
-
-1. **Run plan cycle** (or press `P`)
-2. **Export for o-my-sim** (or press `E`) → writes `data/routes/gulf-war-psab-001-routes-latest.json`
-3. Point o-my-sim at that file; it publishes each GO route on launch
-
-Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset · **1**/**2** Plan/Routes · **?** help.
 
 ---
 
@@ -129,31 +222,6 @@ Dark ops console aligned with **o-my-debrief** (timeline / key events) and
 **battlespace-manager** (route table, threat bands, map + segment timeline).
 **Options** tab showcases the CONOPS top-three working set; Plan for guess-and-see;
 Routes for fleet overview; More details for map / threats / task breakout.
-
----
-
-## Screenshots
-
-### 1. Plan tab — cost grid + threats
-
-![Plan PSAB world](docs/screenshots/01-plan-psab-world.png)
-
-### 2. Options tab — force archetypes A/B/C
-
-![Options top-three](docs/screenshots/02-options-top-three.png)
-
-### 3. Routes overview — metrics + table
-
-![Routes overview](docs/screenshots/03-routes-overview-metrics.png)
-
-### 4. Aligned multi-platform timeline (TOT)
-
-![Aligned timeline](docs/screenshots/04-aligned-timeline.png)
-
-### 5. More details — map, threats, task breakout
-
-![Route details](docs/screenshots/05-route-details-map-threats.png)
-
 
 ---
 
