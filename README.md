@@ -123,7 +123,12 @@ Set `NAV_SOURCE=fixture|xplane` for theater navaid density (default `fixture`; e
 - [`docs/MISSION-ROUTE-DEV-GUIDE.md`](docs/MISSION-ROUTE-DEV-GUIDE.md) — mission constraints for B/C
 - [`docs/DEMO-WORLD.md`](docs/DEMO-WORLD.md) — PSAB / Kuwait / Iraq scenario
 - [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md) — published-waypoint-only design
-- [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — export contract for o-my-sim
+- [`docs/UCI-CONTRACTS.md`](docs/UCI-CONTRACTS.md) — **normative** send/ingest field tables (planner, sim, o-my, COP, EOB, F2T2EA)
+- [`docs/UCI-GAPS.md`](docs/UCI-GAPS.md) — UCI 2.5 / A-GRA messages we should use but do not yet
+- [`docs/UCI-MESSAGE-INTERACTIONS.md`](docs/UCI-MESSAGE-INTERACTIONS.md) — catalog element ↔ topic matrix
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end stack map
+- [`docs/IXDF-FEEDBACK.md`](docs/IXDF-FEEDBACK.md) — plan-vs-actual / retask UI contract
+- [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — JSON export companion for o-my-sim
 - [`docs/examples/gulf-war-psab-001-routes-example.json`](docs/examples/gulf-war-psab-001-routes-example.json) — sample bundle
 - [`docs/screenshots/`](docs/screenshots/) — Plan / Options / Routes UI captures
 

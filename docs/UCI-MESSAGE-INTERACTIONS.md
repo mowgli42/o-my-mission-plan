@@ -50,6 +50,28 @@ UCI rule used throughout: **sub-plans (`RoutePlan`, `TaskPlan`, `RouteActivityPl
 | **RouteModificationRequest** + **RouteModificationRequestStatus** | ActionRequest-2 | `uci.route.modification` | Atomic route edit; result is a **new** `RoutePlan` with incremented version |
 | **Task** *(o-my allocator product)* | Data-1 | `uci.task` | Dynamic allocation (ISR/SEAD/STRIKE) on top of the deliberate TaskPlan |
 
+### EOB / OOB distro (fuzzy-reconciler and/or planner publish)
+
+| UCI 2.5 / A-GRA element | Primitive | Topic | Purpose |
+|-------------------------|-----------|-------|---------|
+| **OrderOfBattle** | DataRecord-1 | `uci.oob` | Versioned units/sites/equipment/threats in a volume |
+| **OrderOfBattleRequest** (+ status) | ActionRequest-2 | `uci.oob.request` | On-demand subset by OpZone |
+| **WorkingEOB** / **WorkingEOB_Request** | A-GRA | `uci.eob.working` | Working subset of EOB |
+| **EOB_CorrelationRecord** | A-GRA | `uci.eob.correlation` | SignalReport / Entity → EOB_RecordID |
+| **Entity** (pre-briefed OOB) | Data-1 | `uci.entity` | HUMINT/EOB object, not a live fused track |
+| **MissionPlanValidationCommand** | Command-2 | `uci.mission.plan.validation` | Revalidate plan when OOB changes |
+
+### F2T2EA catalog (o-my; planner may seed)
+
+| UCI 2.5 element | Primitive | Topic | Purpose |
+|-----------------|-----------|-------|---------|
+| **Prioritization** | DataRecord-1 | `uci.prioritization` | Priority list **per F2T2EA phase**, system, time, or space (alias beads `o-my-w17.1`) |
+| **RequirementSet** | Data-1 | `uci.requirement.set` | Ready-for-planning / JIPCL-lite |
+| **DMPI** / **DMPI_Designation** / **DMPI_Status** | Data / Command | `uci.dmpi*` | Aimpoint distinct from Entity centroid |
+| **EffectPlan** / **ActionPlan** | Data-1 | `uci.effect.plan`, `uci.action.plan` | Desired effect + action sub-plans |
+| **StrikeConsentRequest** | ActionRequest-2 | `uci.strike.consent` | ROE / CDE gate before Engage |
+| **DamageAssessmentRequest** | ActionRequest-2 | `uci.assessment.damage.request` | Assess / BDA request |
+
 ### Operator attention (o-my publishes; display subscribes)
 
 | Element | Topic | Maps to Attention Rail |
@@ -57,6 +79,8 @@ UCI rule used throughout: **sub-plans (`RoutePlan`, `TaskPlan`, `RouteActivityPl
 | **ThreatNotification** (program) | `uci.threat.notification` | TST / POPUP / TARGET today; **PLAN_DEVIATION**, **RETASK** added |
 | **RouteThreatAssessment** | `uci.route.threat` | Route exposure |
 | **SystemNotification** (catalog) | optional later | System-level alerts |
+
+Normative send/ingest tables: [UCI-CONTRACTS.md](UCI-CONTRACTS.md). Unused catalog that we **should** use: [UCI-GAPS.md](UCI-GAPS.md).
 
 ---
 

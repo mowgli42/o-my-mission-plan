@@ -144,9 +144,11 @@ sequenceDiagram
   participant C2 as o-my
   participant UI as battlespace-manager
 
-  FR->>MP: region JSON (fixed threats)
+  FR->>MP: region JSON + EOB profile (fixed threats)
+  MP->>Bus: OrderOfBattle / WorkingEOB + pre-briefed Entity
   MP->>Bus: MissionPlan + RoutePlan + TaskPlan + RouteActivityPlan
   MP->>Bus: MissionPlanStatus PLANNED
+  MP->>Bus: Prioritization + DMPI (seed)
   UI->>Bus: MissionPlanActivationCommand
   Bus->>Sim: activate
   Sim->>Bus: MissionPlanActivationStatus + ExecutionStatus EXECUTING
@@ -186,7 +188,7 @@ sequenceDiagram
 | **o-my-sim** | Load generated `scenario.json`; fly `route.waypoints`; publish `MissionPlanExecutionStatus`; honor `TaskCommand` / `TASK_EXECUTE` timeline |
 | **o-my** | Subscribe to `uci.mission.plan*`; plan-monitor compares `PlatformStatus` to `RoutePlan`; republish execution + notifications |
 | **battlespace-manager** | Planned/actual polylines; Attention kinds `PLAN_DEVIATION`, `RETASK`; Decisions tab publishes `TaskCommand` instead of HTTP |
-| **fuzzy-reconciler** | Optional “Export for mission plan” = existing working-set JSON (already compatible) |
+| **fuzzy-reconciler** | EOB profile (#16) + WorkingEOB / OrderOfBattle export; base JSON remains the identity space |
 
 ---
 
@@ -197,4 +199,4 @@ sequenceDiagram
 - o-my [UCI_MESSAGE_MAPPING.md](https://github.com/mowgli42/o-my/blob/main/docs/UCI_MESSAGE_MAPPING.md)
 - o-my [UI_IMPROVEMENTS_IXDF.md](https://github.com/mowgli42/o-my/blob/main/docs/UI_IMPROVEMENTS_IXDF.md)
 - fuzzy-reconciler [REGIONAL-FIXTURES.md](https://github.com/mowgli42/fuzzy-reconciler/blob/main/docs/REGIONAL-FIXTURES.md)
-- This repo: [UCI-MESSAGE-INTERACTIONS.md](UCI-MESSAGE-INTERACTIONS.md), [IXDF-FEEDBACK.md](IXDF-FEEDBACK.md)
+- This repo: [UCI-CONTRACTS.md](UCI-CONTRACTS.md) (normative send/ingest), [UCI-GAPS.md](UCI-GAPS.md), [UCI-MESSAGE-INTERACTIONS.md](UCI-MESSAGE-INTERACTIONS.md), [IXDF-FEEDBACK.md](IXDF-FEEDBACK.md)
