@@ -138,9 +138,9 @@ Existing o-my F2T2EA topics stay: `uci.intel.product`, `uci.threat.assessment`, 
 **Must persist:** `id`, EOB identity keys, lat/lon, category.  
 **Ignore OK:** `original_row`, UI-only reconcilation fields.
 
-### 1b. WorkingEOB / OrderOfBattle XML (gap — implement next)
+### 1b. WorkingEOB / OrderOfBattle XML (prototype: HTTP export)
 
-**Publisher:** fuzzy-reconciler (new export) **or** o-my-mission-plan wrapping ingested JSON  
+**Publisher:** fuzzy-reconciler `POST /api/export/oob` **or** o-my-mission-plan wrapping ingested JSON (`GET /api/uci/export` key `OrderOfBattle`)  
 **Consumer:** o-my (EOB store), o-my-sim (known OB layer), battlespace-manager (static threat overlay)
 
 Topic `uci.oob` / `uci.eob.working`. CorrelationID = `OrderOfBattleID`.

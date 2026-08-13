@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "region": "gulf",
+    "label": "EOB identity-key sample for OrderOfBattle round-trip",
+    "note": "Synthetic; airports must be omitted from OOB export."
+  },
+  "entities": [
+    {
+      "id": "gulf-sam-001",
+      "name": "SA-6 Battery Al-Jaber",
+      "lat": 29.076,
+      "lon": 47.92,
+      "analyzed_at": "2026-08-01T00:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "eob_record_id": "EOB-GULF-SAM-001",
+        "elnot": "SA6",
+        "be_number": "BE123456",
+        "o_suffix": "A",
+        "mobility": "FIXED",
+        "operational_status": "operational",
+        "range_km": 24
+      }
+    },
+    {
+      "id": "gulf-ew-002",
+      "name": "EW Radar Basra",
+      "lat": 30.51,
+      "lon": 47.78,
+      "analyzed_at": "2026-08-01T00:00:00Z",
+      "category": "early_warning_radar",
+      "attributes": {
+        "eob_record_id": "EOB-GULF-EW-002",
+        "elnot": "TALLKING",
+        "mobility": "FIXED",
+        "range_km": 300
+      }
+    },
+    {
+      "id": "gulf-bm-003",
+      "name": "BM Site Nasiriyah",
+      "lat": 31.05,
+      "lon": 46.26,
+      "analyzed_at": "2026-08-01T00:00:00Z",
+      "category": "ballistic_missile_site",
+      "attributes": {
+        "eob_record_id": "EOB-GULF-BM-003",
+        "elnot": "SS1",
+        "mobility": "FIXED",
+        "range_km": 50
+      }
+    },
+    {
+      "id": "gulf-apt-009",
+      "name": "Kuwait Intl",
+      "lat": 29.2266,
+      "lon": 47.9689,
+      "analyzed_at": "2026-08-01T00:00:00Z",
+      "category": "large_airport",
+      "attributes": {}
+    }
+  ]
+}

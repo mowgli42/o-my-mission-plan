@@ -65,3 +65,64 @@ def test_insert_returns_task_command_ack():
     assert uci["messageType"] == "TaskCommand"
     assert "TaskCommand" in uci["xml"]
     assert uci["feedback"]["kind"] == "RETASK"
+
+
+def _blob(xml: dict) -> str:
+    return " ".join(xml.values())
+
+
+def test_eob_identity_keys_pass_through_to_oob():
+    fixture = default_fixture_path().parent / "eob_identity.json"
+    r = client.post(
+        "/api/region/ingest",
+        json={"region_file": str(fixture), "max_threats": 10, "run_plan": True},
+    )
+    assert r.status_code == 200
+    uci = client.get("/api/uci/export")
+    assert uci.status_code == 200
+    xml = uci.json()["xml"]
+    oob = xml["OrderOfBattle"]
+    assert "MessageType>OrderOfBattle" in oob.replace(" ", "") or "OrderOfBattle" in oob
+    assert "EOB-GULF-SAM-001" in oob
+    assert "SA6" in oob
+    assert "gulf-sam-001" in oob
+    assert "gulf-apt-009" not in oob
+    task_xml = " ".join(v for k, v in xml.items() if k.startswith("TP-"))
+    assert "TargetEntityID" in task_xml
+    assert "gulf-sam-001" in task_xml
+    assert "EntityID>gulf-sam-001" in xml["MissionPlan"].replace(" ", "") or "gulf-sam-001" in xml["MissionPlan"]
+
+
+def test_oob_validation_does_not_mutate_routeplan():
+    fixture = default_fixture_path().parent / "eob_identity.json"
+    client.post("/api/region/ingest", json={"region_file": str(fixture), "run_plan": True})
+    before = session.route_waypoint_fingerprint()
+    assert before
+    r = client.post(
+        "/api/uci/validate-oob",
+        json={
+            "order_of_battle_id": "OOB-EOB-IDENTITY-V2",
+            "changed_entity_ids": ["gulf-sam-001"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["routesUnchanged"] is True
+    assert "ORDER_OF_BATTLE" in body["xml"]["MissionPlanValidationCommand"]
+    assert body["state"] == "INVALID"
+    after = session.route_waypoint_fingerprint()
+    assert after == before
+
+
+def test_strike_export_seeds_dmpi_and_prioritization():
+    fixture = default_fixture_path().parent / "eob_identity.json"
+    client.post("/api/region/ingest", json={"region_file": str(fixture), "run_plan": True})
+    xml = client.get("/api/uci/export").json()["xml"]
+    assert "DMPI" in xml
+    assert "gulf-bm-003" in xml["DMPI"] or "gulf-sam-001" in xml["DMPI"]
+    assert "Prioritization" in xml
+    pri = xml["Prioritization"]
+    assert "F2T2EA_TARGET" in pri
+    assert "gulf-sam-001" in pri or "gulf-bm-003" in pri
+    assert "RequirementSet" in xml
+    assert "ReadyForPlanning" in xml["RequirementSet"]

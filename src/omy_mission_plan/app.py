@@ -125,6 +125,12 @@ class DeviationRequest(BaseModel):
     mission_plan_id: str = "MSN-GULF-PSAB-01"
 
 
+class ValidateOobRequest(BaseModel):
+    order_of_battle_id: str
+    changed_entity_ids: list[str] = Field(default_factory=list)
+    mission_plan_id: str = "MSN-GULF-PSAB-01"
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "o-my-mission-plan", "version": __version__}
@@ -584,6 +590,19 @@ def export_uci_plan(mission_plan_id: str = "MSN-GULF-PSAB-01"):
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"missionPlanId": mission_plan_id, "xml": xml}
+
+
+@app.post("/api/uci/validate-oob")
+def validate_oob(body: ValidateOobRequest):
+    """OOB version bump → MissionPlanValidationCommand. Does not mutate RoutePlan."""
+    try:
+        return session.validate_against_oob(
+            order_of_battle_id=body.order_of_battle_id,
+            changed_entity_ids=body.changed_entity_ids,
+            mission_plan_id=body.mission_plan_id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/feedback/deviation")

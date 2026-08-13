@@ -24,7 +24,7 @@ UCI: *Order of Battle includes units, sites, equipment, and all known threats in
 
 | Gap | Catalog | Why it matters | Spec / issue action |
 |-----|---------|----------------|---------------------|
-| No OOB message on the bus | **`OrderOfBattle`** (DataRecord-1) | Planner, sim, COP, and fusion need one versioned laydown, not a private JSON file | Hop 1b contract; FR export + planner republish |
+| No OOB message on the bus | **`OrderOfBattle`** (DataRecord-1) | Planner, sim, COP, and fusion need one versioned laydown, not a private JSON file | **Prototype:** FR `POST /api/export/oob` + planner export wrap. Live Redis still later |
 | No request/response for a volume | **`OrderOfBattleRequest`** / **`OrderOfBattleRequestStatus`** | On-demand subset (OpZone) instead of dumping 300 sites | Optional after first publish |
 | No working-set bounded by zone | A-GRA **`WorkingEOB`**, **`WorkingEOB_Request`** | CAOC “current EOB in Kuwait box” | FR export; o-my store |
 | No SIGINT↔site join | A-GRA **`EOB_CorrelationRecord`** | Fix phase: SignalReport ELNOT → EOB record | o-my Fix; sim #19 detections |
@@ -80,14 +80,14 @@ o-my already has a **program** kill-chain on Redis. Gaps are **catalog** message
 | Message | omp spec | FR spec | sim spec | o-my spec | COP spec | GH |
 |---------|----------|---------|----------|-----------|----------|-----|
 | Region JSON + EOB keys | R21, R24 | EOB profile | gulf import | — | — | FR #16 |
-| WorkingEOB / OrderOfBattle | R24 | EOB export | known OB layer | EOB ingest | static overlay | **new** |
+| WorkingEOB / OrderOfBattle | R24 | EOB export HTTP | known OB layer | EOB ingest | static overlay | FR #16/#19; omp #27 |
 | MissionPlan bundle | R22 | — | ingest/fly | subscribe | dashed route | omp export done; **sim/o-my new** |
-| MissionPlanCommand / Activation / Validation | R25 | — | activation ACK | validation on OOB | activate control | **new** |
-| RequirementSet | R25 | — | — | JIPCL map | — | w17.6 + **new** |
+| MissionPlanCommand / Activation / Validation | R25 | — | activation ACK | validation on OOB | activate control | omp validation prototype (#28 rest) |
+| RequirementSet | R25 | — | — | JIPCL map | — | omp stub; w17.6 |
 | ExecutionStatus + PLAN_DEVIATION | R23 | — | publish coarse | plan-monitor | Attention + overlay | **new** (COP/o-my) |
 | TaskCommand / Cancel / RouteModification | R23, R26 | — | honor + ACK | allocator | publish (G4) | BM #14 comment + **new** |
-| Prioritization | R27 | — | — | alias w17.1 | optional list | **new** + w17.1 |
-| DMPI / EffectPlan | R27 | — | fly to DMPI if present | Target/Assess | map marker | **new** |
+| Prioritization | R27 | — | — | alias w17.1 | optional list | omp seed; o-my alias |
+| DMPI / EffectPlan | R27 | — | fly to DMPI if present | Target/Assess | map marker | omp DMPI seed; EffectPlan id stub |
 | EOB_CorrelationRecord | — | — | SignalReport from delta | Fix | — | **new** |
 | StrikeConsent / DamageAssessmentRequest | — | — | — | w17.2 / w17.4 | — | map beads |
 

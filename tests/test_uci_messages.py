@@ -3,12 +3,15 @@ from __future__ import annotations
 from omy_mission_plan.uci_messages import (
     MissionPlan,
     MissionPlanExecutionStatus,
+    MissionPlanValidationCommand,
     TaskCommand,
     build_mission_plan_execution_xml,
     build_mission_plan_xml,
+    build_mission_plan_validation_xml,
     build_task_command_xml,
     parse_mission_plan_execution_xml,
     parse_mission_plan_xml,
+    parse_mission_plan_validation_xml,
     parse_task_command_xml,
 )
 
@@ -69,3 +72,16 @@ def test_task_command_round_trip():
     assert parsed.role == "STRIKE"
     assert parsed.target_entity_id == "GUL-9"
     assert round(parsed.latitude, 2) == 29.1
+
+
+def test_validation_command_round_trip():
+    cmd = MissionPlanValidationCommand(
+        mission_plan_id="MSN-TEST-1",
+        reason="ORDER_OF_BATTLE",
+        order_of_battle_id="OOB-V2",
+        changed_entity_ids=["gulf-sam-001"],
+        correlation_id="MSN-TEST-1",
+    )
+    parsed = parse_mission_plan_validation_xml(build_mission_plan_validation_xml(cmd))
+    assert parsed.reason == "ORDER_OF_BATTLE"
+    assert parsed.changed_entity_ids == ["gulf-sam-001"]

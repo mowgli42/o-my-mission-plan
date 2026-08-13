@@ -52,6 +52,29 @@ KIND_BY_CATEGORY = {
     "command_post": "SAM",
 }
 
+# UCI OrderOfBattle Record/Kind (docs/UCI-CONTRACTS.md hop 1b)
+OOB_KIND_BY_CATEGORY = {
+    "sam_site": "MissileRecord",
+    "surveillance_radar": "EmitterRecord",
+    "early_warning_radar": "EmitterRecord",
+    "elint_site": "EmitterRecord",
+    "ballistic_missile_site": "MissileRecord",
+    "coastal_defense": "LandRecord",
+    "command_post": "FacilityRecord",
+}
+
+EOB_RESERVED_KEYS = (
+    "eob_record_id",
+    "elnot",
+    "be_number",
+    "o_suffix",
+    "site_pin",
+    "evaluation_code",
+    "country_code",
+    "mobility",
+    "operational_status",
+)
+
 SEVERITY_BY_STATUS = {
     "operational": "HIGH",
     "degraded": "MEDIUM",
@@ -173,6 +196,8 @@ def to_task(fixed: FixedThreat) -> Task:
         location=LatLon(lat=fixed.latitude, lon=fixed.longitude),
         priority=max(1, 4 - fixed.priority),
         label=f"{role} {fixed.name}",
+        target_entity_id=fixed.entity_id,
+        target_type=fixed.category,
     )
 
 

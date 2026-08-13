@@ -14,10 +14,10 @@ Work **in this order**. Hub: `docs/UCI-CONTRACTS.md`. Gaps: `docs/UCI-GAPS.md`.
 
 | Bead | GH | Focus | Blocks |
 |------|----|-------|--------|
-| `omp-uci.1` | #27 | EOB profile ingest + `OrderOfBattle` | after fuzzy-reconciler #16 then #19 |
-| `omp-uci.2` | #28 | MissionPlanCommand / Activation / Validation / RequirementSet | `.1` |
-| `omp-uci.3` | #29 | Seed `Prioritization` + `DMPI` + EffectPlan | `.2` |
-| `omp-uci.4` | #30 | Cross-stack required-field test | `.3` (last) |
+| `omp-uci.1` | #27 | EOB profile ingest + `OrderOfBattle` | **prototype done** (after FR #16/#19) |
+| `omp-uci.2` | #28 | MissionPlanCommand / Activation / Validation / RequirementSet | `.1` — validation + RequirementSet stub done; Command/Activation remain |
+| `omp-uci.3` | #29 | Seed `Prioritization` + `DMPI` + EffectPlan | `.2` — **prototype done** (EffectPlan is ids only) |
+| `omp-uci.4` | #30 | Cross-stack required-field test | `.3` (last) — still open |
 
 Sibling beads (other repos): `fr-osm` → `fr-76d`; `o-my-sim-u1n.1` → `.2` → `.3`; `o-my-59k.1` → `.2` → `.3`; `battlespace-manager-5xt.1` → `.2` → `.3`; `omd-50m`.
 

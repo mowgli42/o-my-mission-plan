@@ -84,7 +84,13 @@
         "height_m": 41.5,
         "range_km": 381.6,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "eob_record_id": "EOB-GUL-00003",
+        "elnot": "SA6",
+        "be_number": "BE000003",
+        "o_suffix": "A",
+        "mobility": "FIXED",
+        "operational_status": "operational"
       },
       "original_row": {
         "site_id": "GUL-00003",

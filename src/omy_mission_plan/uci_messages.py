@@ -13,9 +13,11 @@ from uuid import uuid4
 
 NS_UCI = "urn:uci:standard:1.0"
 NS_MP = "urn:omy:mission:1.0"
+NS_EOB = "urn:omy:eob:1.0"
 
 ET.register_namespace("uci", NS_UCI)
 ET.register_namespace("mp", NS_MP)
+ET.register_namespace("eob", NS_EOB)
 
 EXECUTION_STATES = ("PLANNED", "ACTIVATING", "EXECUTING", "ON_PLAN", "OFF_PLAN", "COMPLETE", "ABORTED")
 TASK_ROLES = ("ISR", "COLLECTION", "STRIKE", "SEAD", "CAS", "CAP", "EW")
@@ -132,6 +134,8 @@ class MissionPlan:
     route_activity_plan_ids: list[str] = field(default_factory=list)
     execution_order: list[str] = field(default_factory=list)
     threat_entity_ids: list[str] = field(default_factory=list)
+    order_of_battle_id: str = ""
+    requirement_set_id: str = ""
     correlation_id: str = ""
 
 
@@ -272,6 +276,10 @@ def build_mission_plan_xml(plan: MissionPlan, sender: str = "o-my-mission-plan")
         threats = ET.SubElement(body, f"{{{NS_MP}}}ThreatEntities")
         for eid in plan.threat_entity_ids:
             threats.append(_q("EntityID", NS_MP, eid))
+    if plan.order_of_battle_id:
+        body.append(_q("OrderOfBattleID", NS_MP, plan.order_of_battle_id))
+    if plan.requirement_set_id:
+        body.append(_q("RequirementSetID", NS_MP, plan.requirement_set_id))
     return _xml(root)
 
 
@@ -354,6 +362,8 @@ def parse_mission_plan_xml(xml_body: str) -> MissionPlan:
         threat_entity_ids=[
             el.text or "" for el in (threats_el.findall(f"{{{NS_MP}}}EntityID") if threats_el is not None else [])
         ],
+        order_of_battle_id=_text(body, "OrderOfBattleID"),
+        requirement_set_id=_text(body, "RequirementSetID"),
         correlation_id=corr,
     )
 
@@ -398,5 +408,216 @@ def parse_task_command_xml(xml_body: str) -> TaskCommand:
         latitude=float(_text(loc, "Latitude") or 0) if loc is not None else 0.0,
         longitude=float(_text(loc, "Longitude") or 0) if loc is not None else 0.0,
         reason=_text(body, "Reason"),
+        correlation_id=corr or "",
+    )
+
+
+@dataclass
+class OobRecord:
+    entity_id: str
+    name: str
+    latitude: float
+    longitude: float
+    category: str
+    kind: str
+    eob_record_id: str = ""
+    elnot: str = ""
+    be_number: str = ""
+    o_suffix: str = ""
+    evaluation_code: str = ""
+    mobility: str = "FIXED"
+    operational_status: str = ""
+
+
+@dataclass
+class OrderOfBattle:
+    order_of_battle_id: str
+    name: str
+    valid_from: str = ""
+    records: list[OobRecord] = field(default_factory=list)
+    correlation_id: str = ""
+
+
+@dataclass
+class PrioritizationItem:
+    rank: int
+    entity_id: str
+    task_id: str = ""
+    dmpi_id: str = ""
+
+
+@dataclass
+class Prioritization:
+    prioritization_id: str
+    purpose: str
+    phase: str = ""
+    mission_plan_id: str = ""
+    items: list[PrioritizationItem] = field(default_factory=list)
+    correlation_id: str = ""
+
+
+@dataclass
+class DMPI:
+    dmpi_id: str
+    target_entity_id: str
+    latitude: float
+    longitude: float
+    elevation_feet: float = 0.0
+    task_id: str = ""
+    weapon_effect: str = ""
+    correlation_id: str = ""
+
+
+@dataclass
+class RequirementSet:
+    requirement_set_id: str
+    name: str
+    ready_for_planning: bool = True
+    mission_plan_id: str = ""
+    correlation_id: str = ""
+
+
+@dataclass
+class EffectPlan:
+    effect_plan_id: str
+    mission_plan_id: str
+    task_ids: list[str] = field(default_factory=list)
+    correlation_id: str = ""
+
+
+@dataclass
+class MissionPlanValidationCommand:
+    mission_plan_id: str
+    reason: str
+    order_of_battle_id: str
+    changed_entity_ids: list[str] = field(default_factory=list)
+    correlation_id: str = ""
+
+
+def build_order_of_battle_xml(oob: OrderOfBattle, sender: str = "o-my-mission-plan") -> str:
+    corr = oob.correlation_id or oob.order_of_battle_id
+    root = _header("OrderOfBattle", sender, correlation_id=corr)
+    body = ET.SubElement(root, f"{{{NS_EOB}}}OrderOfBattle")
+    body.append(_q("OrderOfBattleID", NS_EOB, oob.order_of_battle_id))
+    body.append(_q("Name", NS_EOB, oob.name))
+    if oob.valid_from:
+        body.append(_q("ValidFrom", NS_EOB, oob.valid_from))
+    recs = ET.SubElement(body, f"{{{NS_EOB}}}Records")
+    for rec in oob.records:
+        node = ET.SubElement(recs, f"{{{NS_EOB}}}Record")
+        node.append(_q("EOB_RecordID", NS_EOB, rec.eob_record_id or rec.entity_id))
+        node.append(_q("EntityID", NS_EOB, rec.entity_id))
+        node.append(_q("Name", NS_EOB, rec.name))
+        node.append(_q("Category", NS_EOB, rec.category))
+        node.append(_q("Kind", NS_EOB, rec.kind))
+        pos = ET.SubElement(node, f"{{{NS_EOB}}}Position")
+        pos.append(_q("Latitude", NS_EOB, round(rec.latitude, 6)))
+        pos.append(_q("Longitude", NS_EOB, round(rec.longitude, 6)))
+        if rec.elnot:
+            node.append(_q("ELNOT", NS_EOB, rec.elnot))
+        if rec.be_number:
+            node.append(_q("BE_Number", NS_EOB, rec.be_number))
+        if rec.o_suffix:
+            node.append(_q("O_Suffix", NS_EOB, rec.o_suffix))
+        if rec.evaluation_code:
+            node.append(_q("EvaluationCode", NS_EOB, rec.evaluation_code))
+        node.append(_q("Mobility", NS_EOB, rec.mobility or "FIXED"))
+        if rec.operational_status:
+            node.append(_q("OperationalStatus", NS_EOB, rec.operational_status))
+    return _xml(root)
+
+
+def build_prioritization_xml(pri: Prioritization, sender: str = "o-my-mission-plan") -> str:
+    corr = pri.correlation_id or pri.mission_plan_id or pri.prioritization_id
+    root = _header("Prioritization", sender, correlation_id=corr)
+    body = ET.SubElement(root, f"{{{NS_MP}}}Prioritization")
+    body.append(_q("PrioritizationID", NS_MP, pri.prioritization_id))
+    body.append(_q("Purpose", NS_MP, pri.purpose))
+    if pri.phase:
+        body.append(_q("Phase", NS_MP, pri.phase))
+    if pri.mission_plan_id:
+        body.append(_q("MissionPlanID", NS_MP, pri.mission_plan_id))
+    items = ET.SubElement(body, f"{{{NS_MP}}}Items")
+    for item in pri.items:
+        node = ET.SubElement(items, f"{{{NS_MP}}}Item")
+        node.append(_q("Rank", NS_MP, item.rank))
+        node.append(_q("EntityID", NS_MP, item.entity_id))
+        if item.task_id:
+            node.append(_q("TaskID", NS_MP, item.task_id))
+        if item.dmpi_id:
+            node.append(_q("DMPI_ID", NS_MP, item.dmpi_id))
+    return _xml(root)
+
+
+def build_dmpi_xml(dmpi: DMPI, sender: str = "o-my-mission-plan") -> str:
+    corr = dmpi.correlation_id or dmpi.target_entity_id
+    root = _header("DMPI", sender, correlation_id=corr)
+    body = ET.SubElement(root, f"{{{NS_MP}}}DMPI")
+    body.append(_q("DMPI_ID", NS_MP, dmpi.dmpi_id))
+    body.append(_q("TargetEntityID", NS_MP, dmpi.target_entity_id))
+    body.append(_q("Latitude", NS_MP, round(dmpi.latitude, 5)))
+    body.append(_q("Longitude", NS_MP, round(dmpi.longitude, 5)))
+    body.append(_q("ElevationFeet", NS_MP, int(dmpi.elevation_feet)))
+    if dmpi.task_id:
+        body.append(_q("TaskID", NS_MP, dmpi.task_id))
+    if dmpi.weapon_effect:
+        body.append(_q("WeaponEffect", NS_MP, dmpi.weapon_effect))
+    return _xml(root)
+
+
+def build_requirement_set_xml(req: RequirementSet, sender: str = "o-my-mission-plan") -> str:
+    corr = req.correlation_id or req.mission_plan_id or req.requirement_set_id
+    root = _header("RequirementSet", sender, correlation_id=corr)
+    body = ET.SubElement(root, f"{{{NS_MP}}}RequirementSet")
+    body.append(_q("RequirementSetID", NS_MP, req.requirement_set_id))
+    body.append(_q("Name", NS_MP, req.name))
+    body.append(_q("ReadyForPlanning", NS_MP, req.ready_for_planning))
+    if req.mission_plan_id:
+        body.append(_q("MissionPlanID", NS_MP, req.mission_plan_id))
+    return _xml(root)
+
+
+def build_effect_plan_xml(plan: EffectPlan, sender: str = "o-my-mission-plan") -> str:
+    corr = plan.correlation_id or plan.mission_plan_id
+    root = _header("EffectPlan", sender, correlation_id=corr)
+    body = ET.SubElement(root, f"{{{NS_MP}}}EffectPlan")
+    body.append(_q("EffectPlanID", NS_MP, plan.effect_plan_id))
+    body.append(_q("MissionPlanID", NS_MP, plan.mission_plan_id))
+    tasks = ET.SubElement(body, f"{{{NS_MP}}}Tasks")
+    for tid in plan.task_ids:
+        tasks.append(_q("TaskID", NS_MP, tid))
+    return _xml(root)
+
+
+def build_mission_plan_validation_xml(
+    cmd: MissionPlanValidationCommand, sender: str = "o-my-mission-plan"
+) -> str:
+    corr = cmd.correlation_id or cmd.mission_plan_id
+    root = _header("MissionPlanValidationCommand", sender, correlation_id=corr)
+    body = ET.SubElement(root, f"{{{NS_MP}}}MissionPlanValidationCommand")
+    body.append(_q("MissionPlanID", NS_MP, cmd.mission_plan_id))
+    body.append(_q("Reason", NS_MP, cmd.reason))
+    body.append(_q("OrderOfBattleID", NS_MP, cmd.order_of_battle_id))
+    changed = ET.SubElement(body, f"{{{NS_MP}}}ChangedEntities")
+    for eid in cmd.changed_entity_ids:
+        changed.append(_q("EntityID", NS_MP, eid))
+    return _xml(root)
+
+
+def parse_mission_plan_validation_xml(xml_body: str) -> MissionPlanValidationCommand:
+    root = ET.fromstring(xml_body)
+    body = root.find(f"{{{NS_MP}}}MissionPlanValidationCommand")
+    if body is None:
+        raise ValueError("Not a MissionPlanValidationCommand")
+    header = root.find(f"{{{NS_UCI}}}Header")
+    corr = header.findtext(f"{{{NS_UCI}}}CorrelationID", "") if header is not None else ""
+    changed_el = body.find(f"{{{NS_MP}}}ChangedEntities")
+    return MissionPlanValidationCommand(
+        mission_plan_id=_text(body, "MissionPlanID"),
+        reason=_text(body, "Reason"),
+        order_of_battle_id=_text(body, "OrderOfBattleID"),
+        changed_entity_ids=[
+            el.text or "" for el in (changed_el.findall(f"{{{NS_MP}}}EntityID") if changed_el is not None else [])
+        ],
         correlation_id=corr or "",
     )
