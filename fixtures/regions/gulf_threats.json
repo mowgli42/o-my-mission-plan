@@ -1,0 +1,947 @@
+{
+  "meta": {
+    "region": "gulf",
+    "label": "Gulf / Iraq-Kuwait area",
+    "seed": 42,
+    "base_date": "2026-03-01T12:00:00Z",
+    "anchors": [
+      {
+        "name": "Baghdad corridor",
+        "lat": 33.31,
+        "lon": 44.37
+      },
+      {
+        "name": "Basra area",
+        "lat": 30.51,
+        "lon": 47.78
+      },
+      {
+        "name": "Mosul area",
+        "lat": 36.34,
+        "lon": 43.13
+      },
+      {
+        "name": "Kuwait northern",
+        "lat": 29.5,
+        "lon": 47.7
+      },
+      {
+        "name": "Nasiriyah area",
+        "lat": 31.05,
+        "lon": 46.26
+      },
+      {
+        "name": "Baghdad Intl Airport",
+        "lat": 33.2625,
+        "lon": 44.2346
+      },
+      {
+        "name": "Basra Intl Airport",
+        "lat": 30.5491,
+        "lon": 47.6621
+      },
+      {
+        "name": "Kuwait Intl Airport",
+        "lat": 29.2266,
+        "lon": 47.9689
+      },
+      {
+        "name": "Erbil area",
+        "lat": 36.19,
+        "lon": 44.01
+      },
+      {
+        "name": "Kirkuk area",
+        "lat": 35.47,
+        "lon": 44.39
+      }
+    ],
+    "note": "Synthetic data for fuzzy-reconciler testing only; not real site lists.",
+    "count": 29,
+    "source": "fuzzy-reconciler/fixtures/regions/examples/gulf_base.json",
+    "subset": "fixed-threats-for-mission-plan",
+    "categories": [
+      "sam_site",
+      "surveillance_radar",
+      "early_warning_radar",
+      "ballistic_missile_site",
+      "coastal_defense",
+      "command_post",
+      "elint_site"
+    ]
+  },
+  "entities": [
+    {
+      "id": "GUL-00003",
+      "name": "Mosul AD Battery 3",
+      "lat": 36.291942,
+      "lon": 43.537846,
+      "analyzed_at": "2026-02-06T04:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 41.5,
+        "range_km": 381.6,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00003",
+        "label": "Mosul AD Battery 3",
+        "latitude": 36.291942,
+        "longitude": 43.537846,
+        "as_of": "2026-02-06T04:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 41.5,
+        "range_km": 381.6,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00023",
+      "name": "Air Defense Site GUL-0023",
+      "lat": 36.350954,
+      "lon": 43.086412,
+      "analyzed_at": "2026-02-08T09:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 9.9,
+        "range_km": 369.3,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00023",
+        "label": "Air Defense Site GUL-0023",
+        "latitude": 36.350954,
+        "longitude": 43.086412,
+        "as_of": "2026-02-08T09:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 9.9,
+        "range_km": 369.3,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00033",
+      "name": "AD Battery GUL-0033",
+      "lat": 36.099504,
+      "lon": 43.23384,
+      "analyzed_at": "2026-02-27T01:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 43.6,
+        "range_km": 138.2,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00033",
+        "label": "AD Battery GUL-0033",
+        "latitude": 36.099504,
+        "longitude": 43.23384,
+        "as_of": "2026-02-27T01:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 43.6,
+        "range_km": 138.2,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00043",
+      "name": "Air Defense Site GUL-0043",
+      "lat": 36.491799,
+      "lon": 42.946248,
+      "analyzed_at": "2026-02-27T22:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 49.8,
+        "range_km": 438.4,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00043",
+        "label": "Air Defense Site GUL-0043",
+        "latitude": 36.491799,
+        "longitude": 42.946248,
+        "as_of": "2026-02-27T22:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 49.8,
+        "range_km": 438.4,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00053",
+      "name": "SAM Battery GUL-0053",
+      "lat": 35.897906,
+      "lon": 43.338797,
+      "analyzed_at": "2026-02-21T10:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 41.4,
+        "range_km": 387.2,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00053",
+        "label": "SAM Battery GUL-0053",
+        "latitude": 35.897906,
+        "longitude": 43.338797,
+        "as_of": "2026-02-21T10:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 41.4,
+        "range_km": 387.2,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00055",
+      "name": "Air Defense Site GUL-0055",
+      "lat": 31.000701,
+      "lon": 46.243635,
+      "analyzed_at": "2026-02-11T04:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 31.8,
+        "range_km": 285.2,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      },
+      "original_row": {
+        "site_id": "GUL-00055",
+        "label": "Air Defense Site GUL-0055",
+        "latitude": 31.000701,
+        "longitude": 46.243635,
+        "as_of": "2026-02-11T04:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 31.8,
+        "range_km": 285.2,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      }
+    },
+    {
+      "id": "GUL-00063",
+      "name": "Mosul SAM Battery 63",
+      "lat": 36.407607,
+      "lon": 42.933876,
+      "analyzed_at": "2026-02-02T00:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 50.5,
+        "range_km": 74.8,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00063",
+        "label": "Mosul SAM Battery 63",
+        "latitude": 36.407607,
+        "longitude": 42.933876,
+        "as_of": "2026-02-02T00:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 50.5,
+        "range_km": 74.8,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00073",
+      "name": "Air Defense Site GUL-0073",
+      "lat": 36.399572,
+      "lon": 43.162642,
+      "analyzed_at": "2026-02-08T20:00:00Z",
+      "category": "sam_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 12.6,
+        "range_km": 157.8,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00073",
+        "label": "Air Defense Site GUL-0073",
+        "latitude": 36.399572,
+        "longitude": 43.162642,
+        "as_of": "2026-02-08T20:00:00Z",
+        "asset_type": "sam_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 12.6,
+        "range_km": 157.8,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00001",
+      "name": "Coastal Watch GUL-0001",
+      "lat": 33.432549,
+      "lon": 44.210079,
+      "analyzed_at": "2026-01-22T06:00:00Z",
+      "category": "surveillance_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 61.4,
+        "band": "S-band",
+        "range_km": 178.2,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      },
+      "original_row": {
+        "site_id": "GUL-00001",
+        "label": "Coastal Watch GUL-0001",
+        "latitude": 33.432549,
+        "longitude": 44.210079,
+        "as_of": "2026-01-22T06:00:00Z",
+        "asset_type": "surveillance_radar",
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 61.4,
+        "band": "S-band",
+        "range_km": 178.2,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      }
+    },
+    {
+      "id": "GUL-00013",
+      "name": "Coastal Watch GUL-0013",
+      "lat": 36.223669,
+      "lon": 43.058976,
+      "analyzed_at": "2026-01-29T23:00:00Z",
+      "category": "surveillance_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "maintenance",
+        "height_m": 31.3,
+        "band": "X-band",
+        "range_km": 326.2,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      },
+      "original_row": {
+        "site_id": "GUL-00013",
+        "label": "Coastal Watch GUL-0013",
+        "latitude": 36.223669,
+        "longitude": 43.058976,
+        "as_of": "2026-01-29T23:00:00Z",
+        "asset_type": "surveillance_radar",
+        "region": "gulf",
+        "status": "maintenance",
+        "height_m": 31.3,
+        "band": "X-band",
+        "range_km": 326.2,
+        "operator": "Gulf Ops",
+        "anchor": "Mosul area"
+      }
+    },
+    {
+      "id": "GUL-00019",
+      "name": "Erbil Coastal Watch 19",
+      "lat": 36.297488,
+      "lon": 43.912246,
+      "analyzed_at": "2026-01-30T23:00:00Z",
+      "category": "surveillance_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 62.7,
+        "band": "C-band",
+        "range_km": 427.6,
+        "operator": "Gulf Ops",
+        "anchor": "Erbil area"
+      },
+      "original_row": {
+        "site_id": "GUL-00019",
+        "label": "Erbil Coastal Watch 19",
+        "latitude": 36.297488,
+        "longitude": 43.912246,
+        "as_of": "2026-01-30T23:00:00Z",
+        "asset_type": "surveillance_radar",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 62.7,
+        "band": "C-band",
+        "range_km": 427.6,
+        "operator": "Gulf Ops",
+        "anchor": "Erbil area"
+      }
+    },
+    {
+      "id": "GUL-00021",
+      "name": "Coastal Watch GUL-0021",
+      "lat": 33.268008,
+      "lon": 44.257589,
+      "analyzed_at": "2026-02-18T12:00:00Z",
+      "category": "surveillance_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "degraded",
+        "height_m": 64.5,
+        "band": "L-band",
+        "range_km": 299.4,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      },
+      "original_row": {
+        "site_id": "GUL-00021",
+        "label": "Coastal Watch GUL-0021",
+        "latitude": 33.268008,
+        "longitude": 44.257589,
+        "as_of": "2026-02-18T12:00:00Z",
+        "asset_type": "surveillance_radar",
+        "region": "gulf",
+        "status": "degraded",
+        "height_m": 64.5,
+        "band": "L-band",
+        "range_km": 299.4,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      }
+    },
+    {
+      "id": "GUL-00026",
+      "name": "Coastal Watch GUL-0026",
+      "lat": 33.222458,
+      "lon": 44.278505,
+      "analyzed_at": "2026-02-15T03:00:00Z",
+      "category": "surveillance_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "maintenance",
+        "height_m": 37.7,
+        "band": "X-band",
+        "range_km": 289.3,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad Intl Airport"
+      },
+      "original_row": {
+        "site_id": "GUL-00026",
+        "label": "Coastal Watch GUL-0026",
+        "latitude": 33.222458,
+        "longitude": 44.278505,
+        "as_of": "2026-02-15T03:00:00Z",
+        "asset_type": "surveillance_radar",
+        "region": "gulf",
+        "status": "maintenance",
+        "height_m": 37.7,
+        "band": "X-band",
+        "range_km": 289.3,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad Intl Airport"
+      }
+    },
+    {
+      "id": "GUL-00031",
+      "name": "Coastal Watch GUL-0031",
+      "lat": 33.257909,
+      "lon": 44.210501,
+      "analyzed_at": "2026-01-28T20:00:00Z",
+      "category": "surveillance_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 38.7,
+        "band": "C-band",
+        "range_km": 120.9,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      },
+      "original_row": {
+        "site_id": "GUL-00031",
+        "label": "Coastal Watch GUL-0031",
+        "latitude": 33.257909,
+        "longitude": 44.210501,
+        "as_of": "2026-01-28T20:00:00Z",
+        "asset_type": "surveillance_radar",
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 38.7,
+        "band": "C-band",
+        "range_km": 120.9,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      }
+    },
+    {
+      "id": "GUL-00002",
+      "name": "Basra Early Warning Node 2",
+      "lat": 30.861943,
+      "lon": 47.732254,
+      "analyzed_at": "2026-02-07T03:00:00Z",
+      "category": "early_warning_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "degraded",
+        "height_m": 31.4,
+        "band": "UHF",
+        "range_km": 233.4,
+        "operator": "Gulf Ops",
+        "anchor": "Basra area"
+      },
+      "original_row": {
+        "site_id": "GUL-00002",
+        "label": "Basra Early Warning Node 2",
+        "latitude": 30.861943,
+        "longitude": 47.732254,
+        "as_of": "2026-02-07T03:00:00Z",
+        "asset_type": "early_warning_radar",
+        "region": "gulf",
+        "status": "degraded",
+        "height_m": 31.4,
+        "band": "UHF",
+        "range_km": 233.4,
+        "operator": "Gulf Ops",
+        "anchor": "Basra area"
+      }
+    },
+    {
+      "id": "GUL-00010",
+      "name": "Kirkuk Early Warning Node 10",
+      "lat": 35.471828,
+      "lon": 44.399502,
+      "analyzed_at": "2026-01-24T17:00:00Z",
+      "category": "early_warning_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 26.4,
+        "band": "X-band",
+        "range_km": 84.2,
+        "operator": "Gulf Ops",
+        "anchor": "Kirkuk area"
+      },
+      "original_row": {
+        "site_id": "GUL-00010",
+        "label": "Kirkuk Early Warning Node 10",
+        "latitude": 35.471828,
+        "longitude": 44.399502,
+        "as_of": "2026-01-24T17:00:00Z",
+        "asset_type": "early_warning_radar",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 26.4,
+        "band": "X-band",
+        "range_km": 84.2,
+        "operator": "Gulf Ops",
+        "anchor": "Kirkuk area"
+      }
+    },
+    {
+      "id": "GUL-00022",
+      "name": "Early Warning Node GUL-0022",
+      "lat": 30.437969,
+      "lon": 47.669515,
+      "analyzed_at": "2026-02-20T11:00:00Z",
+      "category": "early_warning_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 23.8,
+        "band": "X-band",
+        "range_km": 367.1,
+        "operator": "Gulf Ops",
+        "anchor": "Basra area"
+      },
+      "original_row": {
+        "site_id": "GUL-00022",
+        "label": "Early Warning Node GUL-0022",
+        "latitude": 30.437969,
+        "longitude": 47.669515,
+        "as_of": "2026-02-20T11:00:00Z",
+        "asset_type": "early_warning_radar",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 23.8,
+        "band": "X-band",
+        "range_km": 367.1,
+        "operator": "Gulf Ops",
+        "anchor": "Basra area"
+      }
+    },
+    {
+      "id": "GUL-00032",
+      "name": "Basra Early Warning Node 32",
+      "lat": 30.512176,
+      "lon": 47.626556,
+      "analyzed_at": "2026-02-18T00:00:00Z",
+      "category": "early_warning_radar",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 37.4,
+        "band": "UHF",
+        "range_km": 264.3,
+        "operator": "Gulf Ops",
+        "anchor": "Basra area"
+      },
+      "original_row": {
+        "site_id": "GUL-00032",
+        "label": "Basra Early Warning Node 32",
+        "latitude": 30.512176,
+        "longitude": 47.626556,
+        "as_of": "2026-02-18T00:00:00Z",
+        "asset_type": "early_warning_radar",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 37.4,
+        "band": "UHF",
+        "range_km": 264.3,
+        "operator": "Gulf Ops",
+        "anchor": "Basra area"
+      }
+    },
+    {
+      "id": "GUL-00004",
+      "name": "Kuwait Strategic Pad 4",
+      "lat": 29.241201,
+      "lon": 48.477991,
+      "analyzed_at": "2026-02-18T04:00:00Z",
+      "category": "ballistic_missile_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "maintenance",
+        "height_m": 46.8,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      },
+      "original_row": {
+        "site_id": "GUL-00004",
+        "label": "Kuwait Strategic Pad 4",
+        "latitude": 29.241201,
+        "longitude": 48.477991,
+        "as_of": "2026-02-18T04:00:00Z",
+        "asset_type": "ballistic_missile_site",
+        "region": "gulf",
+        "status": "maintenance",
+        "height_m": 46.8,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      }
+    },
+    {
+      "id": "GUL-00014",
+      "name": "Missile Complex GUL-0014",
+      "lat": 29.409693,
+      "lon": 47.618132,
+      "analyzed_at": "2026-01-26T11:00:00Z",
+      "category": "ballistic_missile_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 48.4,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      },
+      "original_row": {
+        "site_id": "GUL-00014",
+        "label": "Missile Complex GUL-0014",
+        "latitude": 29.409693,
+        "longitude": 47.618132,
+        "as_of": "2026-01-26T11:00:00Z",
+        "asset_type": "ballistic_missile_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 48.4,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      }
+    },
+    {
+      "id": "GUL-00024",
+      "name": "BM Site GUL-0024",
+      "lat": 29.626269,
+      "lon": 47.838534,
+      "analyzed_at": "2026-02-20T20:00:00Z",
+      "category": "ballistic_missile_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 19.1,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      },
+      "original_row": {
+        "site_id": "GUL-00024",
+        "label": "BM Site GUL-0024",
+        "latitude": 29.626269,
+        "longitude": 47.838534,
+        "as_of": "2026-02-20T20:00:00Z",
+        "asset_type": "ballistic_missile_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 19.1,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      }
+    },
+    {
+      "id": "GUL-00034",
+      "name": "BM Site GUL-0034",
+      "lat": 29.605485,
+      "lon": 47.615159,
+      "analyzed_at": "2026-02-20T13:00:00Z",
+      "category": "ballistic_missile_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 51.0,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      },
+      "original_row": {
+        "site_id": "GUL-00034",
+        "label": "BM Site GUL-0034",
+        "latitude": 29.605485,
+        "longitude": 47.615159,
+        "as_of": "2026-02-20T13:00:00Z",
+        "asset_type": "ballistic_missile_site",
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 51.0,
+        "operator": "Gulf Ops",
+        "anchor": "Kuwait northern"
+      }
+    },
+    {
+      "id": "GUL-00005",
+      "name": "Coast Node GUL-0005",
+      "lat": 30.569864,
+      "lon": 46.160544,
+      "analyzed_at": "2026-02-28T02:00:00Z",
+      "category": "coastal_defense",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 59.4,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      },
+      "original_row": {
+        "site_id": "GUL-00005",
+        "label": "Coast Node GUL-0005",
+        "latitude": 30.569864,
+        "longitude": 46.160544,
+        "as_of": "2026-02-28T02:00:00Z",
+        "asset_type": "coastal_defense",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 59.4,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      }
+    },
+    {
+      "id": "GUL-00025",
+      "name": "Shore Battery GUL-0025",
+      "lat": 31.136461,
+      "lon": 46.557315,
+      "analyzed_at": "2026-01-26T05:00:00Z",
+      "category": "coastal_defense",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 30.5,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      },
+      "original_row": {
+        "site_id": "GUL-00025",
+        "label": "Shore Battery GUL-0025",
+        "latitude": 31.136461,
+        "longitude": 46.557315,
+        "as_of": "2026-01-26T05:00:00Z",
+        "asset_type": "coastal_defense",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 30.5,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      }
+    },
+    {
+      "id": "GUL-00035",
+      "name": "Shore Battery GUL-0035",
+      "lat": 30.941986,
+      "lon": 46.180911,
+      "analyzed_at": "2026-02-18T03:00:00Z",
+      "category": "coastal_defense",
+      "attributes": {
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 38.8,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      },
+      "original_row": {
+        "site_id": "GUL-00035",
+        "label": "Shore Battery GUL-0035",
+        "latitude": 30.941986,
+        "longitude": 46.180911,
+        "as_of": "2026-02-18T03:00:00Z",
+        "asset_type": "coastal_defense",
+        "region": "gulf",
+        "status": "standby",
+        "height_m": 38.8,
+        "operator": "Gulf Ops",
+        "anchor": "Nasiriyah area"
+      }
+    },
+    {
+      "id": "GUL-00011",
+      "name": "C2 Node GUL-0011",
+      "lat": 33.279131,
+      "lon": 44.303759,
+      "analyzed_at": "2026-02-01T16:00:00Z",
+      "category": "command_post",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 30.4,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      },
+      "original_row": {
+        "site_id": "GUL-00011",
+        "label": "C2 Node GUL-0011",
+        "latitude": 33.279131,
+        "longitude": 44.303759,
+        "as_of": "2026-02-01T16:00:00Z",
+        "asset_type": "command_post",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 30.4,
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      }
+    },
+    {
+      "id": "GUL-00060",
+      "name": "C2 Node GUL-0060",
+      "lat": 35.32651,
+      "lon": 44.320897,
+      "analyzed_at": "2026-01-21T12:00:00Z",
+      "category": "command_post",
+      "attributes": {
+        "region": "gulf",
+        "status": "degraded",
+        "height_m": 18.3,
+        "operator": "Gulf Ops",
+        "anchor": "Kirkuk area"
+      },
+      "original_row": {
+        "site_id": "GUL-00060",
+        "label": "C2 Node GUL-0060",
+        "latitude": 35.32651,
+        "longitude": 44.320897,
+        "as_of": "2026-01-21T12:00:00Z",
+        "asset_type": "command_post",
+        "region": "gulf",
+        "status": "degraded",
+        "height_m": 18.3,
+        "operator": "Gulf Ops",
+        "anchor": "Kirkuk area"
+      }
+    },
+    {
+      "id": "GUL-00099",
+      "name": "ELINT Node GUL-0099",
+      "lat": 36.14283,
+      "lon": 44.099858,
+      "analyzed_at": "2026-01-31T08:00:00Z",
+      "category": "elint_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 24.7,
+        "band": "X-band",
+        "operator": "Gulf Ops",
+        "anchor": "Erbil area"
+      },
+      "original_row": {
+        "site_id": "GUL-00099",
+        "label": "ELINT Node GUL-0099",
+        "latitude": 36.14283,
+        "longitude": 44.099858,
+        "as_of": "2026-01-31T08:00:00Z",
+        "asset_type": "elint_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 24.7,
+        "band": "X-band",
+        "operator": "Gulf Ops",
+        "anchor": "Erbil area"
+      }
+    },
+    {
+      "id": "GUL-00181",
+      "name": "SIGINT Site GUL-0181",
+      "lat": 33.326018,
+      "lon": 44.269498,
+      "analyzed_at": "2026-02-18T14:00:00Z",
+      "category": "elint_site",
+      "attributes": {
+        "region": "gulf",
+        "status": "active",
+        "height_m": 12.7,
+        "band": "S-band",
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      },
+      "original_row": {
+        "site_id": "GUL-00181",
+        "label": "SIGINT Site GUL-0181",
+        "latitude": 33.326018,
+        "longitude": 44.269498,
+        "as_of": "2026-02-18T14:00:00Z",
+        "asset_type": "elint_site",
+        "region": "gulf",
+        "status": "active",
+        "height_m": 12.7,
+        "band": "S-band",
+        "operator": "Gulf Ops",
+        "anchor": "Baghdad corridor"
+      }
+    }
+  ]
+}

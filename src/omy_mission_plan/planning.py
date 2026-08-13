@@ -346,6 +346,59 @@ class PlanningSession:
             bundle = {**bundle, "written_paths": dict(self.last_export_paths)}
         return bundle
 
+    def ingest_region_threats(
+        self,
+        path: Path | str | None = None,
+        *,
+        max_threats: int = 16,
+        replace_demo_threats: bool = True,
+    ) -> dict[str, Any]:
+        """Load fuzzy-reconciler fixed threats into the live session.
+
+        Each site becomes a Threat, a Task (ISR or STRIKE), and a published
+        mission waypoint so the existing route generator can associate it
+        without inventing PROX-* points.
+        """
+        from .region_threats import (
+            default_fixture_path,
+            load_region_file,
+            threats_from_region,
+            to_demo_threat,
+            to_mission_fix,
+            to_task,
+        )
+
+        source = Path(path) if path else default_fixture_path()
+        data = load_region_file(source)
+        fixed = threats_from_region(data, max_threats=max_threats)
+        demo_threats = [to_demo_threat(item) for item in fixed]
+        self.threats = demo_threats if replace_demo_threats else list(self.threats) + demo_threats
+        added_tasks = 0
+        for item in fixed:
+            task = to_task(item)
+            if task.id not in self.task_index:
+                self.tasks.append(task)
+                self.task_index[task.id] = task
+                added_tasks += 1
+            fix = to_mission_fix(item)
+            self.mission_waypoints[fix.id] = fix
+        self.latest = None
+        return {
+            "source": str(source),
+            "region": (data.get("meta") or {}).get("region"),
+            "threats_ingested": len(fixed),
+            "tasks_added": added_tasks,
+            "tasks_total": len(self.tasks),
+            "mission_waypoints": len(self.mission_waypoints),
+        }
+
+    def export_uci_mission_plan(self, *, mission_plan_id: str = "MSN-GULF-PSAB-01") -> dict[str, str]:
+        if self.latest is None:
+            raise RuntimeError("No plan yet — run a plan cycle first")
+        from .uci_export import plans_to_uci
+
+        return plans_to_uci(self.latest, self.tasks, mission_plan_id=mission_plan_id)
+
     def routes_overview(self) -> dict[str, Any]:
         """Battlespace / debrief-aligned routes overview payload."""
         if self.latest is None:

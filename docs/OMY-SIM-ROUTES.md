@@ -45,6 +45,17 @@ Committed example (for contract review without running the service):
 
 [`docs/examples/gulf-war-psab-001-routes-example.json`](examples/gulf-war-psab-001-routes-example.json)
 
+## UCI 2.5 MissionPlan (catalog)
+
+JSON `uci.route` on launch is the sim import. The same plan cycle also exports catalog XML:
+
+```bash
+curl -s -X POST http://localhost:8000/api/region/ingest -d '{"max_threats":12}'
+curl -s http://localhost:8000/api/uci/export | jq '.xml | keys'
+```
+
+Topics and element names: [`ARCHITECTURE.md`](ARCHITECTURE.md), [`UCI-MESSAGE-INTERACTIONS.md`](UCI-MESSAGE-INTERACTIONS.md). o-my-sim should activate via `MissionPlanActivation` and publish `MissionPlanExecutionStatus` while flying; `PlatformStatus` remains the kinematics heartbeat.
+
 ## Bundle shape
 
 ```json

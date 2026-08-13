@@ -13,8 +13,9 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
   - within **20 nmi** of strike tasks
   - never invents runtime `PROX-*` lat/lon points (see [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md))
 - FastAPI **Route Propagation Service** that tracks fuel remaining and burn rate per leg
-- **Export final GO routes** as JSON for **o-my-sim** to import and publish on `uci.route` when aircraft launch (see [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md))
-- Dark-theme planning console guided by **IxDF / Nielsen usability heuristics**
+- **Export final GO routes** as JSON for **o-my-sim** (`uci.route` on launch) and as **UCI 2.5 `MissionPlan` XML** (`GET /api/uci/export`)
+- Ingest **fuzzy-reconciler region samples** as fixed threats (`POST /api/region/ingest`) — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Dark-theme planning console guided by **IxDF / Nielsen usability heuristics**; plan-vs-actual and in-mission retask feedback in [`docs/IXDF-FEEDBACK.md`](docs/IXDF-FEEDBACK.md)
 
 ---
 
@@ -40,6 +41,9 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 | CONOPS Mission Options A/B/C + compare / re-run | Done |
 | Options UI (top-three showcase) | Done |
 | Unit / API tests | Done (`make test`) |
+| Fuzzy-reconciler fixed-threat ingest | Done (`POST /api/region/ingest`) |
+| UCI 2.5 MissionPlan / RoutePlan / TaskPlan export | Done (`GET /api/uci/export`) |
+| Plan-vs-actual + in-mission TaskCommand feedback | Done (`POST /api/feedback/deviation`, insert-task UCI ACK) |
 
 ---
 

@@ -169,3 +169,22 @@ The HTTP API SHALL expose planner-modes listing, allocate, route/plan, iterate, 
 - Weather/NOTAMs as first-class products (may appear as extra avoid zones later)
 
 Literature algorithms (Dijkstra/CSP, covering TSP, ACO, PSO, RRT*) inform mode design; the prototype deliberately implements graph + greedy variants only.
+
+### R21 — Fuzzy-reconciler fixed threats
+
+The planner SHALL ingest fuzzy-reconciler region JSON (`id`, `name`, `lat`, `lon`, `category`, `attributes`) and treat SAM / radar / BM / coastal / C2 / ELINT sites as **fixed** threats. Airport categories SHALL be ignored. Each ingested site SHALL become a `Threat`, an ISR or STRIKE `Task`, and a published **mission** waypoint (not a runtime `PROX-*` point).
+
+#### Scenario: Gulf region sample yields only IADS-class threats
+
+- **GIVEN** the bundled gulf threat fixture
+- **WHEN** the planner loads threats
+- **THEN** every threat has a fixed-threat category
+- **AND** no airport records are planned against
+
+### R22 — UCI 2.5 MissionPlan export
+
+After a plan cycle the system SHALL export `MissionPlan`, `RoutePlan`, `TaskPlan`, and `RouteActivityPlan` XML using UCI 2.5 element names (`GET /api/uci/export`). `CorrelationID` SHALL equal `MissionPlanID`. JSON `uci.route` export for o-my-sim SHALL remain available.
+
+### R23 — Plan-vs-actual and in-mission feedback
+
+The system SHALL measure cross-track error vs the planned route and return `MissionPlanExecutionStatus` plus an Attention item (`PLAN_DEVIATION`) that includes kind, title, tone, and icon. Dynamic task insertion SHALL return a `TaskCommand` acknowledgement (`RETASK`) so the operator sees accepted/rejected without a silent side channel.
