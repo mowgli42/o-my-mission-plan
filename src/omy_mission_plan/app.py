@@ -106,6 +106,31 @@ class PreferOptionRequest(BaseModel):
     preferred: bool = True
 
 
+class RegionIngestRequest(BaseModel):
+    region: str = "gulf"
+    region_file: Optional[str] = None
+    sibling: bool = False
+    max_threats: int = Field(default=16, ge=1, le=200)
+    replace_demo_threats: bool = True
+    run_plan: bool = True
+
+
+class DeviationRequest(BaseModel):
+    aircraft_id: str
+    lat: float
+    lon: float
+    active_task_id: str = ""
+    planned_task_id: str = ""
+    in_mission_retask: bool = False
+    mission_plan_id: str = "MSN-GULF-PSAB-01"
+
+
+class ValidateOobRequest(BaseModel):
+    order_of_battle_id: str
+    changed_entity_ids: list[str] = Field(default_factory=list)
+    mission_plan_id: str = "MSN-GULF-PSAB-01"
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "o-my-mission-plan", "version": __version__}
@@ -175,11 +200,36 @@ def insert_task(body: InsertTaskRequest):
         label=body.label,
     )
     try:
-        return session.insert_task(body.aircraft_id, task)
+        planned = session.insert_task(body.aircraft_id, task)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    from .uci_messages import TaskCommand, build_task_command_xml
+
+    cmd = TaskCommand(
+        command_id=f"CMD-{task.id}",
+        task_id=task.id,
+        platform_id=body.aircraft_id,
+        role=body.type.value,
+        target_entity_id=task.id,
+        mission_plan_id="MSN-GULF-PSAB-01",
+        latitude=body.lat,
+        longitude=body.lon,
+        reason=body.label or "in-mission task",
+        correlation_id="MSN-GULF-PSAB-01",
+    )
+    payload = planned.model_dump()
+    payload["uci"] = {
+        "messageType": "TaskCommand",
+        "xml": build_task_command_xml(cmd),
+        "feedback": {
+            "kind": "RETASK",
+            "title": f"{body.aircraft_id} retasked in mission",
+            "detail": f"{body.type.value} {task.id} accepted — re-propagating route",
+        },
+    }
+    return payload
 
 
 @app.post("/api/demo/insert-strike")
@@ -511,6 +561,89 @@ def map_positions(t_min: float = 0.0, option_id: Optional[str] = None):
             }
         )
     return {"t_min": t_min, "positions": positions}
+
+
+@app.post("/api/region/ingest")
+def ingest_region(body: Optional[RegionIngestRequest] = None):
+    """Load fuzzy-reconciler fixed-threat region samples into the planning session."""
+    from .region_threats import resolve_region_path
+
+    req = body or RegionIngestRequest()
+    source = resolve_region_path(req.region, req.region_file, sibling=req.sibling)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"region fixture not found: {source}")
+    ingested = session.ingest_region_threats(
+        source, max_threats=req.max_threats, replace_demo_threats=req.replace_demo_threats
+    )
+    plan = session.run_plan_cycle() if req.run_plan else None
+    return {
+        "ingest": ingested,
+        "plan": plan.model_dump() if plan is not None else None,
+    }
+
+
+@app.get("/api/uci/export")
+def export_uci_plan(mission_plan_id: str = "MSN-GULF-PSAB-01"):
+    """UCI 2.5 MissionPlan + sub-plan XML for the shared bus."""
+    try:
+        xml = session.export_uci_mission_plan(mission_plan_id=mission_plan_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"missionPlanId": mission_plan_id, "xml": xml}
+
+
+@app.post("/api/uci/validate-oob")
+def validate_oob(body: ValidateOobRequest):
+    """OOB version bump → MissionPlanValidationCommand. Does not mutate RoutePlan."""
+    try:
+        return session.validate_against_oob(
+            order_of_battle_id=body.order_of_battle_id,
+            changed_entity_ids=body.changed_entity_ids,
+            mission_plan_id=body.mission_plan_id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/feedback/deviation")
+def plan_deviation(body: DeviationRequest):
+    """Compare a live position to the planned route (IxDF plan-vs-actual)."""
+    from .feedback import attention_item, execution_status
+    from .uci_messages import RoutePlan, Waypoint, build_mission_plan_execution_xml
+
+    planned = None
+    if session.latest is not None:
+        planned = next((p for p in session.latest.plans if p.aircraft_id == body.aircraft_id), None)
+    if planned is None or planned.route is None:
+        raise HTTPException(status_code=404, detail="No planned route for aircraft — POST /api/plan first")
+    route = RoutePlan(
+        route_plan_id=f"RP-{body.aircraft_id}",
+        platform_id=body.aircraft_id,
+        route_name=body.aircraft_id,
+        waypoints=[
+            Waypoint(wp.location.lat, wp.location.lon, name=wp.name or wp.id) for wp in planned.route.waypoints
+        ],
+    )
+    status = execution_status(
+        mission_plan_id=body.mission_plan_id,
+        route=route,
+        latitude=body.lat,
+        longitude=body.lon,
+        active_task_id=body.active_task_id,
+        planned_task_id=body.planned_task_id,
+        in_mission_retask=body.in_mission_retask,
+    )
+    return {
+        "status": {
+            "state": status.state,
+            "deviationSeverity": status.deviation_severity,
+            "crossTrackNm": status.cross_track_nm,
+            "detail": status.detail,
+            "inMissionRetask": status.in_mission_retask,
+        },
+        "attention": attention_item(status),
+        "xml": build_mission_plan_execution_xml(status),
+    }
 
 
 @app.post("/api/platforms/order")

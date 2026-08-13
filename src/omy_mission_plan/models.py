@@ -43,6 +43,8 @@ class Task(BaseModel):
     location: LatLon
     priority: int = 0  # higher = more important; stub for future
     label: Optional[str] = None
+    target_entity_id: Optional[str] = None  # fuzzy-reconciler Entity.id
+    target_type: Optional[str] = None
 
 
 class Aircraft(BaseModel):
