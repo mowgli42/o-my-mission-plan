@@ -116,8 +116,8 @@ intentionally external:
 ```bash
 python3 -m pip install -e ".[test]"
 make demo
-# open http://localhost:8000
-# API docs: http://localhost:8000/docs
+# open http://localhost:8010
+# API docs: http://localhost:8010/docs
 ```
 
 1. **Run plan cycle** (or press `P`)
