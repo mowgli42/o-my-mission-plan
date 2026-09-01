@@ -10,6 +10,7 @@ const state = {
   overview: null,
   options: null,
   compare: null,
+  preferredPlan: null,
   costgrid: null,
   exposure: null,
   timeline: null,
@@ -100,17 +101,84 @@ function markerColor(marker) {
 
 /* ---------- Plan view (existing) ---------- */
 
+function preferredOptionMeta() {
+  const pid = state.compare?.preferred_option_id;
+  if (!pid) return null;
+  return (state.options?.options || []).find((o) => o.option_id === pid) || null;
+}
+
+function displayPlan() {
+  return state.preferredPlan || state.plan;
+}
+
+function coaContext() {
+  return state.overview?.coa || (preferredOptionMeta() ? { ...preferredOptionMeta(), preferred: true } : null);
+}
+
+function formatCoaBanner(coa) {
+  if (!coa) return "";
+  const slot = coa.slot ? `Slot ${coa.slot}` : "Contingency pool";
+  const arch = archetypeLabel(coa.archetype || coa.emphasis);
+  const supplier = coa.supplier_id || "fallback";
+  return `
+    <div class="coa-banner" role="status">
+      <span class="coa-eyebrow">Selected COA</span>
+      <div class="coa-main">
+        <strong class="coa-title">${coa.label}</strong>
+        <span class="badge badge-go">Preferred</span>
+      </div>
+      <p class="coa-meta">${slot} · ${arch} · ${supplier} · Plan &amp; Routes reflect this option</p>
+    </div>`;
+}
+
+function renderCoaBanner() {
+  const html = formatCoaBanner(coaContext());
+  for (const sel of ["#coa-banner", "#routes-coa-banner"]) {
+    const el = $(sel);
+    if (el) el.innerHTML = html;
+  }
+}
+
+async function syncPreferredPlan() {
+  const pid = state.compare?.preferred_option_id;
+  if (!pid) {
+    state.preferredPlan = null;
+    return false;
+  }
+  try {
+    const detail = await api(`/api/options/${pid}`);
+    state.preferredPlan = detail.result;
+    return true;
+  } catch {
+    state.preferredPlan = null;
+    return false;
+  }
+}
+
+async function refreshCoaViews() {
+  renderCoaBanner();
+  renderStats();
+  renderTasks();
+  renderFleet();
+  await loadOverview().catch(() => {});
+  await loadExposure();
+  await loadPositions();
+  if (state.routesPane === "timeline") await loadTimeline();
+  refreshMap();
+}
+
 function assignedSet() {
   const set = new Set();
-  if (!state.plan) return set;
-  for (const p of state.plan.plans) {
+  const plan = displayPlan();
+  if (!plan) return set;
+  for (const p of plan.plans) {
     for (const tid of p.assigned_task_ids || []) set.add(tid);
   }
   return set;
 }
 
 function unallocatedSet() {
-  return new Set((state.plan?.unallocated_tasks || []).map((t) => t.id));
+  return new Set((displayPlan()?.unallocated_tasks || []).map((t) => t.id));
 }
 
 function renderTasks() {
@@ -149,7 +217,7 @@ function renderFleet() {
   const list = $("#fleet-list");
   const select = $("#insert-aircraft");
   const aircraft = orderedAircraft();
-  const plansById = Object.fromEntries((state.plan?.plans || []).map((p) => [p.aircraft_id, p]));
+  const plansById = Object.fromEntries((displayPlan()?.plans || []).map((p) => [p.aircraft_id, p]));
   const group = $("#tog-group-type")?.checked ?? state.groupByType;
   state.groupByType = group;
 
@@ -255,7 +323,7 @@ function renderFleet() {
 }
 
 function renderStats() {
-  const s = state.plan?.summary;
+  const s = displayPlan()?.summary;
   $("#stat-go").textContent = s ? s.go : "—";
   $("#stat-nogo").textContent = s ? s.nogo : "—";
   $("#stat-unalloc").textContent = s ? s.unallocated : "—";
@@ -381,7 +449,7 @@ function renderMap(svgSel = "#map", opts = {}) {
 
   const routeSource = opts.route
     ? [opts.route]
-    : (state.plan?.plans || []).filter((p) => p.route?.waypoints?.length);
+    : (displayPlan()?.plans || []).filter((p) => p.route?.waypoints?.length);
 
   const exposureByAc = Object.fromEntries(
     (state.exposure?.platforms || []).map((p) => [p.aircraft_id, p]),
@@ -778,7 +846,7 @@ async function loadCostgrid() {
 }
 
 async function loadExposure() {
-  if (!state.plan && !state.compare?.preferred_option_id) {
+  if (!displayPlan() && !state.compare?.preferred_option_id) {
     state.exposure = null;
     return;
   }
@@ -1011,7 +1079,13 @@ async function loadOptions() {
   const hasPref = !!(
     state.compare?.preferred_option_id || state.options?.options?.some((o) => o.preferred)
   );
-  if (hasPref) $("#btn-export").disabled = false;
+  if (hasPref) {
+    $("#btn-export").disabled = false;
+    await syncPreferredPlan();
+    await refreshCoaViews();
+  } else {
+    renderCoaBanner();
+  }
 }
 
 async function buildTopThree() {
@@ -1049,7 +1123,9 @@ async function preferOption(optionId) {
     });
     await loadOptions();
     $("#btn-export").disabled = false;
-    toast("Preferred option set — Export uses this by default");
+    setPlanReady(true);
+    $("#tab-routes").disabled = false;
+    toast("COA selected — Plan and Routes now show this option");
   } catch (err) {
     toast(String(err.message || err), "error");
   }
@@ -1087,10 +1163,13 @@ async function loadWorld() {
 }
 
 async function loadOverview() {
-  state.overview = await api("/api/routes/overview");
+  const pref = state.compare?.preferred_option_id;
+  const q = pref ? `?option_id=${encodeURIComponent(pref)}` : "";
+  state.overview = await api(`/api/routes/overview${q}`);
   if (!state.selectedRouteId && state.overview.routes?.length) {
     state.selectedRouteId = state.overview.routes[0].aircraft_id;
   }
+  renderCoaBanner();
   renderMetrics();
   renderRoutesTable();
   renderInspect();
@@ -1115,6 +1194,7 @@ async function resetWorld() {
   try {
     await api("/api/reset", { method: "POST" });
     state.plan = null;
+    state.preferredPlan = null;
     state.overview = null;
     state.options = null;
     state.compare = null;
@@ -1288,4 +1368,5 @@ function wire() {
 wire();
 loadWorld()
   .then(() => loadOptions())
+  .then(() => renderCoaBanner())
   .catch((err) => toast(String(err.message || err), "error"));
