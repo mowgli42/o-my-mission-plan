@@ -22,6 +22,7 @@ from .options import (
     ensure_top_three,
     rerun_option,
     resolve_export_option_id,
+    resolve_overview_plan,
 )
 from .planning import PlanningSession, make_demo_insert_task
 from .propagator import propagate
@@ -385,16 +386,25 @@ def get_exported_routes(include_nogo: bool = False, option_id: Optional[str] = N
 
 
 @app.get("/api/routes/overview")
-def routes_overview():
+def routes_overview(option_id: Optional[str] = None):
     """
     Routes screen payload: top metrics, threat impact, debrief-style timelines.
 
-    Aligned with battlespace-manager route display + o-my-debrief key events.
+    Uses the preferred Mission Option when set; pass ``option_id`` to override.
     """
-    if session.latest is None:
-        raise HTTPException(status_code=404, detail="No plan yet — POST /api/plan first")
     try:
-        return session.routes_overview()
+        plan, coa = resolve_overview_plan(session, option_id=option_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown option: {exc}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        from .routes_overview import build_routes_overview
+
+        payload = build_routes_overview(plan, session.aircraft, session.tasks, session.threats)
+        if coa:
+            payload["coa"] = coa
+        return payload
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

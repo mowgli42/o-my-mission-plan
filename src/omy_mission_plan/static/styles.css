@@ -1071,6 +1071,49 @@ a {
   box-shadow: 0 0 0 1px rgba(61, 214, 198, 0.25), var(--shadow);
 }
 
+.coa-banner-host:empty {
+  display: none;
+}
+
+.coa-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgba(61, 214, 198, 0.35);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(61, 214, 198, 0.08), rgba(61, 214, 198, 0.02));
+}
+
+.coa-banner .coa-eyebrow {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-bs);
+  margin-bottom: 0.25rem;
+}
+
+.coa-banner .coa-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.coa-banner .coa-title {
+  font-size: 1rem;
+}
+
+.coa-banner .coa-meta {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.routes-view .coa-banner-host {
+  padding: 0 0 0.5rem;
+}
+
 .option-card.empty {
   opacity: 0.72;
   border-style: dashed;
