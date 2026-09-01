@@ -6,6 +6,8 @@ The current planner feels simplistic, and it is easy to ask whether **routing be
 
 **Answer: no.** The product uses **one** waypoint representation for every route. What varies by archetype / supplier is **how the sequence of those waypoints is chosen**, not the type of object stored on the route.
 
+Teaching walkthrough of the *selection* algorithms (isochrones, A*, VRP) and the ship-weather analogue: **[`ROUTING-ALGORITHMS-WALKTHROUGH.md`](ROUTING-ALGORITHMS-WALKTHROUGH.md)**.
+
 ---
 
 ## 1. Unified representation (always)
@@ -22,9 +24,9 @@ Each waypoint has `id`, `location` (lat/lon), optional `name`, and optional `ass
 
 **Tasks are not waypoints.** A `Task` is a separate object (type, location, priority). Association is a **post-condition**: if some published waypoint on the route lies within 80 nmi (ISR) or 20 nmi (strike) of the task, that waypoint may carry `associated_task_id`. If none does, the task is listed in `unsatisfied_task_ids`.
 
-Legs are always great-circle between consecutive published waypoints (any length). Fuel uses those leg distances.
+Legs are always great-circle between consecutive published waypoints (any length). Fuel uses those distances.
 
-This matches civil IFR practice and `docs/ROUTE-GENERATION.md`: do not invent `PROX-*` or other runtime lat/lon points.
+This matches civil IFR practice and `docs/ROUTE-GENERATION.md`: do not invent `PROX-*` or any other runtime-invented lat/lon points.
 
 ---
 
@@ -44,6 +46,18 @@ So:
 - **Between tasks** you do **not** switch to a different waypoint type.
 - You still fly **fix → fix**.
 - The planner decides *which* published fixes appear and in what order (greedy cover vs shortest path vs cost path vs forced vias).
+
+Algorithm families behind those policies (itinerary vs hop):
+
+| Layer | Family | In this repo today |
+|-------|--------|--------------------|
+| Itinerary (who / order) | VRP, covering salesman, cluster-first | Regional allocator + greedy cover |
+| Civil hop | Dijkstra / A* on published graph | `graph_routing.py` |
+| Mission hop | A* / Dijkstra on threat (or weather) cost field | `costgrid` edge penalties; hex field planned |
+| Time fronts | Isochrones | Metric only (TOT slack) — not default path engine |
+| Feasibility | Constant-burn + reserve | `propagator.py` |
+
+See [`ROUTING-ALGORITHMS-WALKTHROUGH.md`](ROUTING-ALGORITHMS-WALKTHROUGH.md).
 
 ---
 
@@ -65,10 +79,11 @@ If the published set cannot cover a strike (20 nmi is tight), the correct fix is
 
 Legitimate limits of the current implementation:
 
-1. **Task order** is mostly nearest-neighbor, not a real TSP / orienteering solver.
+1. **Task order** is mostly nearest-neighbor, not a real TSP / VRP / orienteering solver.
 2. **Airway structure** is approximated by k-nearest published links, not real ARINC airways.
 3. **Synchronized** options mostly attach timing metadata; they do not yet jointly optimize geometry for TOT.
 4. **No vertical profile** (altitudes, SIDs/STARs, threats as 3-D volumes).
+5. **Threat field** is still edge penalties, not a full weather-map hex grid inside a mission area.
 
 Those are algorithm and data richness gaps—not reasons to fork waypoint representation per method.
 
@@ -96,6 +111,7 @@ Comparison should score distance, GO/NO-GO, unsatisfied tasks, axis/timing fit�
 | Graph + Dijkstra + avoid costs | `suppliers/graph_routing.py` |
 | Supplier contract (ordered fixes in, never tasks-as-fixes) | `suppliers/base.py` |
 | Fuel on legs | `propagator.py` |
+| Algorithm explanation | `docs/ROUTING-ALGORITHMS-WALKTHROUGH.md` |
 
 ---
 
@@ -104,3 +120,5 @@ Comparison should score distance, GO/NO-GO, unsatisfied tasks, axis/timing fit�
 **One waypoint representation. Multiple selection methods.**
 
 Routing “between tasks” means: choose the next published fix(es) that advance coverage of remaining tasks under the active method’s objective (short, cheap under avoid costs, or forced axis)—then associate tasks by proximity. Do not introduce a second waypoint metamodel for inter-task segments.
+
+Itinerary = VRP. Hops = A* (threat/weather field) or Dijkstra (civil graph). Isochrones = time-front metrics. Civil connects to mission at handoffs.
