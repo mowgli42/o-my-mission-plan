@@ -2,7 +2,9 @@
 
 Companion to [`WAYPOINT-AND-ROUTING-MODEL.md`](WAYPOINT-AND-ROUTING-MODEL.md).
 
-This is a teaching walkthrough, not a solver spec. It explains **why** the planner splits itinerary from hop geometry, how weather-routing ideas transfer to threat fields, and which algorithm belongs on which layer.
+Teaching walkthrough (not a solver spec): why itinerary is split from hop geometry, how weather-routing ideas transfer to threat fields, and **which algorithm each military COA actually uses**.
+
+Schematic plots (PSAB / Mutla teaching sketches, not operational charts) live in the printable PDF walkthrough.
 
 ---
 
@@ -24,9 +26,48 @@ VRP builds the skeleton. A* or isochrones shape each arrow. The propagator score
 
 ---
 
-## 2. Isochrones
+## 2. COA options mapped to algorithms
 
-An **isochrone** is a line or front of **equal time** from an origin. Every point on the 6-hour front is reachable in six hours given the current speed field (winds and waves for ships; groundspeed for aircraft).
+This is the alignment table. A/B/C are the pinned working set; the others are named modes / contingency archetypes.
+
+| COA / slot | Intent | Itinerary (VRP flavor) | Hop engine |
+|------------|--------|------------------------|------------|
+| **A Efficient** | Economy of force; fewer jets | **CVRP pack** — minimize `platforms_used` | Short Dijkstra / A* (distance) |
+| **B Synchronized** | Shared TOT; BDA after strike | **VRPTW + precedence** (strike → BDA) | Shared hold vias; ETA / isochrone slack |
+| **C Unexpected axis** | Dislocate; non-obvious approach | Same tasks; vias may change order | **Forced via chain** + Dijkstra |
+| **Threat-avoid** | Survive contested ingress | Prefer airframes with fuel margin | **A* on threat cost field** |
+| **Spread the field** | Do not stack in one kill box | **mTSP** — more tours, less packing | Optional peer-edge penalty |
+| **Area loiter** | Dwell / collect | ISR keeps the collect task | Cyclic published fixes + loiter fuel |
+| **Shock / attrition** (pool) | Front-load or stay resilient | Priority order / redundant assigns | Same hop tools; different packing |
+
+Same task pool should produce different `platforms_used` and different geometries across COAs. That is what Mission Option slots exist to compare.
+
+**Do not** assign a new waypoint type per COA. Efficient and threat-avoid differ in *cost*, not in *object model*.
+
+---
+
+## 3. Practical example — Mutla strike from PSAB
+
+- Home: OEPS (PSAB).
+- Task: STK-01 near Mutla Ridge (needs a published fix within 20 nmi).
+- A SAM umbrella sits on the short radial from the south.
+- Civil graph carries the jet to an **entry handoff**; mission routing owns the last hop.
+
+| COA | What the planner does | What you should see |
+|-----|----------------------|---------------------|
+| Efficient | One fighter; shortest published cover fix | Short radial; nearer the SAM |
+| Threat-avoid | Same fighter; A* raises cost in jam/lethal cells | Dogleg west; more nmi; lower exposure |
+| Unexpected axis | Forced vias toward a western corridor | Not the PSAB-direct radial |
+| Synchronized | Fighter TOT + ISR BDA lag on the option | Geometry may match efficient; **timeline** shows windows |
+| Spread | Second fighter takes Basra instead of stacking Mutla | `platforms_used` up; two separated tours |
+
+Ship analogue on the same story: five cargo ports in the Gulf. Weather does not invent a new kind of waypoint. It changes the **cost of each sea leg**. Which ship calls which ports is still VRP — liner rotation vs tramp vs “split the cargo across more hulls.”
+
+---
+
+## 4. Isochrones
+
+An **isochrone** is a line or front of **equal time** from an origin. Every point on the 6-hour front is reachable in six hours given the current speed field.
 
 ### Classic ship weather-routing loop (James / Hagiwara)
 
@@ -35,61 +76,52 @@ An **isochrone** is a line or front of **equal time** from an origin. Every poin
 3. Keep the points that look best toward the destination (or lowest fuel).
 4. Repeat until a front reaches the goal; trace back the chosen points.
 
-Isochrones answer “where can I be at time *t*?” They shine when the environment changes **speed** (weather). They are awkward as the only engine when the map is a patchwork of hard keep-out cells (lethal umbrellas, no-fly).
+Isochrones answer “where can I be at time *t*?” They shine when the environment changes **speed** (weather). They are awkward as the only engine when the map is a patchwork of hard keep-out cells.
 
-**In o-my:** use isochrones as a **TOT / slack metric** — earliest time any platform can reach a cover set — not as the default mission path engine.
+**In o-my:** use isochrones as a **TOT / slack metric** for COA B — earliest time any platform can reach a cover set — not as the default mission path engine.
 
 ---
 
-## 3. A* and Dijkstra on a cost field
+## 5. A* and Dijkstra on a cost field
 
-**Dijkstra** finds the cheapest path on a graph when every edge cost is non-negative. **A\*** is Dijkstra plus a heuristic (usually remaining great-circle distance) so the search leans toward the goal.
+**Dijkstra** finds the cheapest path when edge costs are non-negative. **A\*** adds a heuristic (usually remaining great-circle) toward the goal.
 
-A weather or threat “map” is just a way to set those edge costs. Paint each cell: green (cheap), yellow (slow or jammed), red (lethal / storm = very high or infinite). Search prefers green.
+A weather or threat “map” only sets those edge costs. Green = cheap, yellow = jam/high waves, red = lethal/storm.
 
-| Field source | Typical cell cost | Hop engine |
-|--------------|-------------------|------------|
-| Wind / waves | Time or fuel to cross the cell | Isochrones or A* |
-| Threat jam / lethal | Distance × exposure (or ∞) | A* / Dijkstra |
-| Civil published graph | Great-circle nmi | Dijkstra (already in repo) |
-
-Prototype cell cost inside a mission area:
+| Field source | Typical cell cost | Hop engine | COA that uses it |
+|--------------|-------------------|------------|------------------|
+| Wind / waves | Time or fuel to cross the cell | Isochrones or A* | Time metric; future weather band |
+| Threat jam / lethal | Distance × exposure (or ∞) | A* / Dijkstra | Threat-avoid |
+| Civil published graph | Great-circle nmi | Dijkstra | Efficient civil ingress/egress |
 
 ```text
 cost = distance_weight × length + Σ exposure(threat, cell)
 ```
 
-Jam range is a soft penalty; lethal range may be treated as hard avoid. The same code path can later accept a weather band. Do not vendor a ship stack just to paint a different field.
+Same code path can later accept a weather band. Do not vendor a ship stack just to paint a different field.
 
 ---
 
-## 4. VRP — why the itinerary layer exists
+## 6. VRP — why the itinerary layer exists
 
-The **Vehicle Routing Problem** assigns stops to a fleet and orders each vehicle’s tour under capacity and (often) time windows. TSP is one traveler visiting every city. VRP is several vehicles, not every stop on every truck, return to depot, do not overload.
+TSP is one traveler visiting every city. **VRP** is several vehicles, not every stop on every truck, return to depot, do not overload.
 
-A beautiful A* hop on a bad assignment still wastes an airframe. VRP decides the skeleton; hop engines only shape the arrows.
+A beautiful A* hop on a bad assignment still wastes an airframe.
 
-| Variant | Rule | o-my analogue |
+| Variant | Rule | COA analogue |
 |---------|------|----------------|
-| CVRP | Capacity per vehicle | Weapons, max_tasks, fuel range |
-| VRPTW | Time windows on stops | TOT earliest/latest, BDA lag |
-| mTSP | Several tours, weak packing | Spread-the-field COA |
-| Covering VRP | Get near, not onto, the point | 80 / 20 nmi proximity |
+| CVRP | Capacity per vehicle | Efficient pack |
+| VRPTW | Time windows | Synchronized TOT / BDA |
+| mTSP | Several tours, weak packing | Spread the field |
+| Covering VRP | Get near, not onto, the point | 80 / 20 nmi |
 | Pickup & delivery | A before B | Strike then BDA |
 | Dynamic VRP | Stops appear mid-tour | Insert task; full re-assess |
 
-### Algorithms you will actually meet
-
-- **Construct.** Clarke–Wright savings (merge two routes if it saves distance and capacity holds). Insertion (put the next stop where extra cost is smallest). Sweep / cluster-first (group nearby tasks, then tour each group) — close to the current regional allocator.
-- **Improve.** 2-opt / relocate / swap between vehicles.
-- **Exact (small *n*).** MIP, branch-and-cut, column generation.
-- **Metaheuristics.** Tabu, ALNS — production logistics; a bead, not the MVP.
-
-**Prototype lock:** greedy insertion + capacity + time-window check. Report unallocated and infeasible-by-time. That is an honest VRP heuristic.
+**Prototype lock:** greedy insertion + capacity + time-window check. Report unallocated and infeasible-by-time.
 
 ---
 
-## 5. Ships vs packages — same split
+## 7. Ships vs packages — same split
 
 | Decision | Cargo + weather | Mission + threats |
 |----------|-----------------|-------------------|
@@ -100,58 +132,53 @@ A beautiful A* hop on a bad assignment still wastes an airframe. VRP decides the
 | Multi-stop | VRP / liner rotation + per-leg router | Allocate + order + per-leg router |
 | Replan | New forecast; closed port | New task; new threat; missed TOT |
 
-Ships rarely let weather reorder the whole rotation by itself. Weather changes ETA and fuel on each ocean leg. Threats should work the same way unless a hop becomes infeasible — then VRP re-orders or drops the task.
+Ships rarely let weather reorder the whole rotation by itself. Threats should work the same way unless a hop becomes infeasible — then VRP re-orders or drops the task.
 
 ---
 
-## 6. Combining them with multiple tasks and a changing field
-
-Do not grow one isochrone that tries to swallow every target. Do not run one A* whose goal is “all tasks.” Loop:
+## 8. Combining multi-task + varying field (COA-aware pick)
 
 ```text
-remaining = tasks
-position  = entry handoff (after civil ingress)
-while remaining:
-    for each task t:
-        C_t = published fixes / cells that cover t
-        cost(t) = A*(position → C_t) on current field
-    pick next t (cheapest cost, or TOT / priority)
-    append hop; position = chosen cover fix
-    drop t; maybe refresh field
-A*(position → exit); then civil egress home
+position = entry handoff (after civil ingress)
+while remaining tasks:
+    cost(t) = A*(position → cover(t)) on current field
+    pick next t by COA:
+        efficient     → cheapest hop that still fits capacity
+        synchronized  → cheapest hop that meets TOT / precedence
+        spread        → hop that increases separation from peers
+        threat_avoid  → cheapest hop under exposure-weighted cost
+        unexpected    → hop that still honors forced vias
+    append hop; update position; maybe refresh field
+A*(position → exit); civil egress home
 ```
 
-If the field is a forecast snapshot, build the grid once. If it is a new weather cycle or a new threat, rebuild costs and re-run remaining hops (full re-assess of that aircraft, per existing CONOPS).
+Do not grow one isochrone that tries to swallow every target.
 
 ---
 
-## 7. Civil vs mission areas
+## 9. Civil vs mission areas
 
-Civil airspace uses the published navaid graph (cheap Dijkstra). The **mission area** is a polygon whose interior is a weather-map-style cost field. Civil ingress ends on an **entry handoff**; mission routing owns entry → tasks → **exit handoff**; civil egress returns home. The two segments share the handoff fix id — no gap.
-
-Mission autonomy may search a hex lattice internally. Export still snaps to handoffs + registered mission fixes. No anonymous grid-cell ids on the wire.
-
-Grid fidelity for the prototype: one 2-D hex/square layer rasterized from continuous threat radii. Next bead: a few altitude layers. Not 1 km cubes yet.
+Civil airspace: published navaid graph (cheap Dijkstra). **Mission area:** polygon with a weather-map cost field. Civil ingress ends on **ENTRY**; mission owns ENTRY → tasks → **EXIT**; civil egress home. Shared handoff ids — no gap.
 
 See [`CIVIL-MISSION-AREAS.md`](CIVIL-MISSION-AREAS.md) and [`THREAT-COST-GRID-OPTIONS.md`](THREAT-COST-GRID-OPTIONS.md).
 
 ---
 
-## 8. What the current code already is
+## 10. What the current code already is
 
 | Piece | Today | Walkthrough name |
 |-------|-------|------------------|
 | `route_generator` greedy cover | Nearest task → nearest covering fix | Constructive VRP / covering salesman |
-| `graph_routing` Dijkstra | k-NN published graph | Hop engine (civil / short) |
-| `costgrid` penalties | Threat circles on graph edges | Thin threat field |
+| `graph_routing` Dijkstra | k-NN published graph | Efficient / civil hop |
+| `costgrid` penalties | Threat circles on graph edges | Thin threat_avoid field |
 | allocator regions | Type + geography | Cluster-first VRP |
-| propagator | Constant burn + reserve | Feasibility, not routing |
-
-The planner feels simplistic because itinerary is still nearest-neighbor and the threat field is still edge penalties — not because waypoints should become a different object per algorithm.
+| option vias | Forced published ids | Unexpected-axis hop |
+| option timing metadata | TOT / BDA stored, not solved | Synchronized VRPTW stub |
+| propagator | Constant burn + reserve | Feasibility |
 
 ---
 
-## 9. Validated vs future
+## 11. Validated vs future
 
 | Validated target | Future bead |
 |------------------|----------------|
@@ -163,10 +190,11 @@ The planner feels simplistic because itinerary is still nearest-neighbor and the
 
 ---
 
-## 10. Related docs
+## 12. Related docs
 
 - [`WAYPOINT-AND-ROUTING-MODEL.md`](WAYPOINT-AND-ROUTING-MODEL.md) — locked representation
-- [`CIVIL-MISSION-AREAS.md`](CIVIL-MISSION-AREAS.md) — handoffs and regimes
-- [`THREAT-COST-GRID-OPTIONS.md`](THREAT-COST-GRID-OPTIONS.md) — weather-map grid; layers vs cubes
-- [`ROUTE-PLANNER-MODES.md`](ROUTE-PLANNER-MODES.md) — threat_avoid, loiter, spread, efficient
-- [`API-PROTOTYPE-SERVICES.md`](API-PROTOTYPE-SERVICES.md) — allocate / plan / iterate contracts
+- [`FORCE-APPROACHES.md`](FORCE-APPROACHES.md) — historical archetypes behind COAs
+- [`CIVIL-MISSION-AREAS.md`](CIVIL-MISSION-AREAS.md) — handoffs
+- [`THREAT-COST-GRID-OPTIONS.md`](THREAT-COST-GRID-OPTIONS.md) — weather-map grid
+- [`ROUTE-PLANNER-MODES.md`](ROUTE-PLANNER-MODES.md) — mode catalog
+- [`API-PROTOTYPE-SERVICES.md`](API-PROTOTYPE-SERVICES.md) — iterate API
