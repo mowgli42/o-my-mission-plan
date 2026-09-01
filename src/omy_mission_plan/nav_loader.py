@@ -11,6 +11,7 @@ from typing import Optional
 
 from . import demo_world
 from .models import Airbase, LatLon, Navaid
+from .paths import find_repo_root
 from .route_generator import PublishedFix
 
 # Gulf / PSAB theater bbox (slightly padded)
@@ -22,9 +23,7 @@ DEFAULT_BBOX = {
 }
 
 # Default extract shipped with the repo (small, demo-scale — not full global)
-DEFAULT_XPLANE_EXTRACT = (
-    Path(__file__).resolve().parents[2] / "data" / "nav" / "gulf-earth_nav.dat"
-)
+DEFAULT_XPLANE_EXTRACT = find_repo_root() / "data" / "nav" / "gulf-earth_nav.dat"
 
 
 def configured_nav_source() -> str:

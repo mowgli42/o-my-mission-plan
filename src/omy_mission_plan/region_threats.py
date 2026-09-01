@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import LatLon, Task, TaskType, Threat
+from .paths import find_repo_root
 from .route_generator import PublishedFix
 
 FIXED_THREAT_CATEGORIES = frozenset(
@@ -106,11 +107,11 @@ class FixedThreat:
 
 
 def default_fixture_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "fixtures" / "regions" / "gulf_threats.json"
+    return find_repo_root() / "fixtures" / "regions" / "gulf_threats.json"
 
 
 def sibling_fuzzy_reconciler_path(region: str = "gulf") -> Path:
-    root = Path(__file__).resolve().parents[3]
+    root = find_repo_root().parent
     showcase = root / "fuzzy-reconciler" / "fixtures" / "regions" / "examples" / f"{region}_base.json"
     canonical = root / "fuzzy-reconciler" / "fixtures" / "regions" / "canonical" / f"{region}_base.json"
     if showcase.exists():

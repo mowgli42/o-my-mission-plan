@@ -67,6 +67,20 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 
 ---
 
+## Deploy on Vercel
+
+`main` is deploy-ready. Import the GitHub repo in the [Vercel dashboard](https://vercel.com/new) (root = repo root; settings come from `vercel.json`), or:
+
+```bash
+npx vercel link && npx vercel --prod
+```
+
+The live demo auto-loads the bundled **fuzzy-reconciler Gulf War EOB**
+(`fixtures/regions/gulf_threats.json`) and runs an initial plan cycle. See
+[`docs/VERCEL.md`](docs/VERCEL.md) for smoke checks and env vars.
+
+---
+
 ## What's implemented
 
 ### Backend (`src/omy_mission_plan/`)
