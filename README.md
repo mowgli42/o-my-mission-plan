@@ -13,8 +13,10 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
   - within **20 nmi** of strike tasks
   - never invents runtime `PROX-*` lat/lon points (see [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md))
 - FastAPI **Route Propagation Service** that tracks fuel remaining and burn rate per leg
-- **Export final GO routes** as JSON for **o-my-sim** to import and publish on `uci.route` when aircraft launch (see [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md))
-- Dark-theme planning console guided by **IxDF / Nielsen usability heuristics**
+- **Export final GO routes** as JSON for **o-my-sim** (`uci.route` on launch) and as **UCI 2.5 `MissionPlan` XML** (`GET /api/uci/export`)
+- Ingest **fuzzy-reconciler region samples** as fixed threats (`POST /api/region/ingest`) — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Export **OrderOfBattle**, **Prioritization**, and **DMPI** with the MissionPlan (`GET /api/uci/export`); OOB updates validate without mutating routes (`POST /api/uci/validate-oob`)
+- Dark-theme planning console guided by **IxDF / Nielsen usability heuristics**; plan-vs-actual and in-mission retask feedback in [`docs/IXDF-FEEDBACK.md`](docs/IXDF-FEEDBACK.md)
 
 ---
 
@@ -128,6 +130,20 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 
 ---
 
+## Deploy on Vercel
+
+`main` is deploy-ready. Import the GitHub repo in the [Vercel dashboard](https://vercel.com/new) (root = repo root; settings come from `vercel.json`), or:
+
+```bash
+npx vercel link && npx vercel --prod
+```
+
+The live demo auto-loads the bundled **fuzzy-reconciler Gulf War EOB**
+(`fixtures/regions/gulf_threats.json`) and runs an initial plan cycle. See
+[`docs/VERCEL.md`](docs/VERCEL.md) for smoke checks and env vars.
+
+---
+
 ## Status
 
 **Functional prototype implemented** (scenario: `gulf-war-psab-001`).
@@ -150,6 +166,11 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 | CONOPS Mission Options A/B/C + compare / re-run | Done |
 | Options UI (top-three showcase) | Done |
 | Unit / API tests | Done (`make test`) |
+| Fuzzy-reconciler fixed-threat ingest | Done (`POST /api/region/ingest`) |
+| UCI 2.5 MissionPlan / RoutePlan / TaskPlan export | Done (`GET /api/uci/export`) |
+| OrderOfBattle + Prioritization + DMPI seed | Done (prototype; `GET /api/uci/export`) |
+| OOB validation without RoutePlan mutate | Done (`POST /api/uci/validate-oob`) |
+| Plan-vs-actual + in-mission TaskCommand feedback | Done (`POST /api/feedback/deviation`, insert-task UCI ACK) |
 
 ---
 
@@ -193,6 +214,10 @@ Keyboard shortcuts: **P** plan · **E** export · **I** insert · **R** reset ·
 | POST | `/api/routes/export` | Write final GO routes (optional `option_id`) |
 | GET | `/api/routes/export` | Build export bundle without writing |
 | GET | `/api/routes/overview` | Routes screen: metrics, threats, timelines |
+| POST | `/api/region/ingest` | Load fuzzy-reconciler region JSON as fixed threats |
+| GET | `/api/uci/export` | MissionPlan + OOB / Prioritization / DMPI XML |
+| POST | `/api/uci/validate-oob` | MissionPlanValidationCommand; does not mutate routes |
+| POST | `/api/feedback/deviation` | Plan-vs-actual MissionPlanExecutionStatus |
 | GET | `/` | Dark planning UI |
 | GET | `/docs` | Swagger |
 
@@ -212,7 +237,12 @@ Set `NAV_SOURCE=fixture|xplane` for theater navaid density (default `fixture`; e
 - [`docs/MISSION-ROUTE-DEV-GUIDE.md`](docs/MISSION-ROUTE-DEV-GUIDE.md) — mission constraints for B/C
 - [`docs/DEMO-WORLD.md`](docs/DEMO-WORLD.md) — PSAB / Kuwait / Iraq scenario
 - [`docs/ROUTE-GENERATION.md`](docs/ROUTE-GENERATION.md) — published-waypoint-only design
-- [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — export contract for o-my-sim
+- [`docs/UCI-CONTRACTS.md`](docs/UCI-CONTRACTS.md) — **normative** send/ingest field tables (planner, sim, o-my, COP, EOB, F2T2EA)
+- [`docs/UCI-GAPS.md`](docs/UCI-GAPS.md) — UCI 2.5 / A-GRA messages we should use but do not yet
+- [`docs/UCI-MESSAGE-INTERACTIONS.md`](docs/UCI-MESSAGE-INTERACTIONS.md) — catalog element ↔ topic matrix
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end stack map
+- [`docs/IXDF-FEEDBACK.md`](docs/IXDF-FEEDBACK.md) — plan-vs-actual / retask UI contract
+- [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — JSON export companion for o-my-sim
 - [`docs/examples/gulf-war-psab-001-routes-example.json`](docs/examples/gulf-war-psab-001-routes-example.json) — sample bundle
 - [`docs/screenshots/`](docs/screenshots/) — Plan / Options / Routes UI captures
 

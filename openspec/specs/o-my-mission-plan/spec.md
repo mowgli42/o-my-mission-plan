@@ -169,3 +169,78 @@ The HTTP API SHALL expose planner-modes listing, allocate, route/plan, iterate, 
 - Weather/NOTAMs as first-class products (may appear as extra avoid zones later)
 
 Literature algorithms (Dijkstra/CSP, covering TSP, ACO, PSO, RRT*) inform mode design; the prototype deliberately implements graph + greedy variants only.
+
+### R21 — Fuzzy-reconciler fixed threats
+
+The planner SHALL ingest fuzzy-reconciler region JSON (`id`, `name`, `lat`, `lon`, `category`, `attributes`) and treat SAM / radar / BM / coastal / C2 / ELINT sites as **fixed** threats. Airport categories SHALL be ignored. Each ingested site SHALL become a `Threat`, an ISR or STRIKE `Task`, and a published **mission** waypoint (not a runtime `PROX-*` point).
+
+#### Scenario: Gulf region sample yields only IADS-class threats
+
+- **GIVEN** the bundled gulf threat fixture
+- **WHEN** the planner loads threats
+- **THEN** every threat has a fixed-threat category
+- **AND** no airport records are planned against
+
+### R22 — UCI 2.5 MissionPlan export
+
+After a plan cycle the system SHALL export `MissionPlan`, `RoutePlan`, `TaskPlan`, and `RouteActivityPlan` XML using UCI 2.5 element names (`GET /api/uci/export`). `CorrelationID` SHALL equal `MissionPlanID`. JSON `uci.route` export for o-my-sim SHALL remain available.
+
+### R23 — Plan-vs-actual and in-mission feedback
+
+The system SHALL measure cross-track error vs the planned route and return `MissionPlanExecutionStatus` plus an Attention item (`PLAN_DEVIATION`) that includes kind, title, tone, and icon. Dynamic task insertion SHALL return a `TaskCommand` acknowledgement (`RETASK`) so the operator sees accepted/rejected without a silent side channel. Deviation thresholds SHALL be WATCH 2 nm, OFF_PLAN 5 nm, CRITICAL 12 nm.
+
+### R24 — EOB profile ingest and OrderOfBattle export
+
+The planner SHALL ingest the fuzzy-reconciler **EOB profile** reserved attributes (`eob_record_id`, `elnot`, `be_number`, `o_suffix`, `site_pin`, `evaluation_code`, `country_code`, `mobility`, `operational_status`) when present, without requiring them for R21 JSON. Identity keys SHALL pass through to `Threat` / `Task.TargetEntityID` unchanged.
+
+When EOB keys are present (or after wrapping the working set), the planner SHALL export UCI `OrderOfBattle` (and MAY export A-GRA `WorkingEOB`) on topic `uci.oob` / `uci.eob.working` per `docs/UCI-CONTRACTS.md` hop 1b. It SHALL NOT write planning overrides back into the fuzzy-reconciler working set (UCI planning override: local to the MissionPlan).
+
+#### Scenario: EOB keys survive ingest and appear on OrderOfBattle
+
+- **GIVEN** a region fixture whose entities include `attributes.eob_record_id` and `elnot`
+- **WHEN** the planner ingests and exports UCI
+- **THEN** `OrderOfBattle` records carry those identity keys
+- **AND** `Task.TargetEntityID` equals the fuzzy `id`
+
+### R25 — Plan lifecycle commands (Command-2 + status)
+
+The planner SHALL accept and/or emit:
+
+- `MissionPlanCommand` — invoke or constrain planning (what-if threat add/remove) and publish `MissionPlanStatus`
+- `MissionPlanActivation` / `MissionPlanActivationStatus` — ready the plan for sim; every command has a status
+- `MissionPlanValidationCommand` — revalidate when `OrderOfBattle` version changes (`Reason=ORDER_OF_BATTLE`); result is `INVALID` or a new MissionPlan version, never an in-place RoutePlan mutate
+- `RequirementSet` (stub) — collection/strike requirements that gate “ready for planning”
+
+Field tables: `docs/UCI-CONTRACTS.md` hops 2 and 4b.
+
+#### Scenario: OOB update invalidates without mutating waypoints
+
+- **GIVEN** an active MissionPlan referencing ThreatEntityIDs
+- **WHEN** a new `OrderOfBattle` version changes one of those entities
+- **THEN** the planner records `MissionPlanValidationCommand` reason `ORDER_OF_BATTLE`
+- **AND** published RoutePlan waypoint coordinates are unchanged until a new MissionPlan version is exported
+
+### R26 — In-mission retask contracts (publisher and consumer)
+
+`TaskCommand`, `TaskCancelCommand` (+ status), and `RouteModificationRequest` (+ status) SHALL use the hop 5c field tables. A successful route modification SHALL emit a **new** `RoutePlan` with incremented version. `[Capability]Command` SHALL NOT be treated as a kinematic plan rewrite.
+
+### R27 — F2T2EA catalog hooks from the deliberate plan
+
+The planner SHALL be able to seed (stub export acceptable):
+
+- `Prioritization` (UCI DataRecord-1) from TaskPlan priorities, with `Purpose` / optional `Phase` (Find–Assess)
+- `DMPI` from STRIKE task coordinates (aimpoint; not only entity centroid)
+- `EffectPlan` / `ActionPlan` identifiers as MissionPlan sub-plan refs when present
+
+Normative field tables: `docs/UCI-CONTRACTS.md` hop 4c. Gaps: `docs/UCI-GAPS.md`.
+
+#### Scenario: Strike task yields a DMPI id
+
+- **GIVEN** a plan cycle with at least one STRIKE task
+- **WHEN** UCI is exported
+- **THEN** a `DMPI` record exists whose `TargetEntityID` matches the task
+- **AND** `Prioritization` ranks include that entity
+
+### R28 — Bidirectional contracts are the implementation source of truth
+
+Publisher and consumer field tables in `docs/UCI-CONTRACTS.md` SHALL be treated as normative. Sibling systems (fuzzy-reconciler, o-my-sim, o-my, battlespace-manager, o-my-debrief) implement send or ingest for their hops; this repo SHALL NOT silently rename topics, MessageTypes, or identity fields.

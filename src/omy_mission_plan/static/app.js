@@ -1073,6 +1073,13 @@ async function loadWorld() {
   renderTasks();
   renderFleet();
   renderStats();
+  try {
+    state.plan = await api("/api/plan");
+    setPlanReady(true);
+    await loadOverview().catch(() => {});
+  } catch {
+    setPlanReady(false);
+  }
   await loadCostgrid();
   await loadExposure();
   await loadPositions();

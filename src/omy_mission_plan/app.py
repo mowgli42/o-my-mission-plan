@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -22,12 +25,42 @@ from .options import (
 )
 from .planning import PlanningSession, make_demo_insert_task
 from .propagator import propagate
+from .region_threats import default_fixture_path
 from .suppliers import list_suppliers
 from . import __version__
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+ON_VERCEL = bool(os.environ.get("VERCEL"))
 
 session = PlanningSession()
+
+
+def _ingest_gulf_eob_on_boot() -> bool:
+    """Load bundled fuzzy-reconciler Gulf EOB and run an initial plan cycle."""
+    flag = os.environ.get("INGEST_GULF_EOB", "1" if ON_VERCEL else "0").strip().lower()
+    return flag in {"1", "true", "yes", "on"}
+
+
+def _bootstrap_gulf_eob() -> dict[str, Any] | None:
+    if not _ingest_gulf_eob_on_boot():
+        return None
+    source = default_fixture_path()
+    if not source.is_file():
+        return {"error": f"gulf fixture missing: {source}"}
+    ingest = session.ingest_region_threats(source, max_threats=16, replace_demo_threats=True)
+    plan = session.run_plan_cycle()
+    return {
+        "source": str(source),
+        "ingest": ingest,
+        "plan_summary": plan.summary,
+    }
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    _bootstrap_gulf_eob()
+    yield
+
 
 app = FastAPI(
     title="o-my Mission Plan",
@@ -38,7 +71,32 @@ app = FastAPI(
         "Unexpected-axis), and export GO routes for o-my-sim launch publish."
     ),
     version=__version__,
+    lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def vercel_restore_original_path(request: Request, call_next):
+    """Recover the browser path when a stale rewrite collapsed ASGI scope to /api/index."""
+    if ON_VERCEL:
+        path = request.scope.get("path") or ""
+        if path == "/api/index" or path.startswith("/api/index/"):
+            original = (
+                request.headers.get("x-forwarded-uri")
+                or request.headers.get("x-invoke-path")
+                or request.headers.get("x-vercel-original-path")
+                or request.headers.get("x-matched-path")
+            )
+            if original:
+                raw = original if "://" in original else f"http://local{original}"
+                parts = urlsplit(raw)
+                new_path = parts.path or "/"
+                if new_path != path:
+                    request.scope["path"] = new_path
+                    request.scope["raw_path"] = new_path.encode("utf-8")
+                    if parts.query:
+                        request.scope["query_string"] = parts.query.encode("utf-8")
+    return await call_next(request)
 
 
 class InsertTaskRequest(BaseModel):
@@ -64,6 +122,13 @@ class ExportRequest(BaseModel):
         default=None,
         description="Export GO routes from a saved Mission Option (preferred for CONOPS).",
     )
+
+
+def _export_request(body: Optional[ExportRequest]) -> ExportRequest:
+    req = body or ExportRequest()
+    if ON_VERCEL and body is None:
+        req.write = False
+    return req
 
 
 class CreateOptionRequest(BaseModel):
@@ -106,9 +171,45 @@ class PreferOptionRequest(BaseModel):
     preferred: bool = True
 
 
+class RegionIngestRequest(BaseModel):
+    region: str = "gulf"
+    region_file: Optional[str] = None
+    sibling: bool = False
+    max_threats: int = Field(default=16, ge=1, le=200)
+    replace_demo_threats: bool = True
+    run_plan: bool = True
+
+
+class DeviationRequest(BaseModel):
+    aircraft_id: str
+    lat: float
+    lon: float
+    active_task_id: str = ""
+    planned_task_id: str = ""
+    in_mission_retask: bool = False
+    mission_plan_id: str = "MSN-GULF-PSAB-01"
+
+
+class ValidateOobRequest(BaseModel):
+    order_of_battle_id: str
+    changed_entity_ids: list[str] = Field(default_factory=list)
+    mission_plan_id: str = "MSN-GULF-PSAB-01"
+
+
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "o-my-mission-plan", "version": __version__}
+    gulf_fixture = default_fixture_path()
+    return {
+        "status": "ok",
+        "service": "o-my-mission-plan",
+        "version": __version__,
+        "vercel": ON_VERCEL,
+        "gulf_eob_bootstrapped": bool(session.fixed_threats),
+        "order_of_battle_id": session.order_of_battle_id,
+        "gulf_fixture": str(gulf_fixture),
+        "gulf_fixture_present": gulf_fixture.is_file(),
+        "plan_ready": session.latest is not None,
+    }
 
 
 @app.get("/api/world")
@@ -175,11 +276,36 @@ def insert_task(body: InsertTaskRequest):
         label=body.label,
     )
     try:
-        return session.insert_task(body.aircraft_id, task)
+        planned = session.insert_task(body.aircraft_id, task)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    from .uci_messages import TaskCommand, build_task_command_xml
+
+    cmd = TaskCommand(
+        command_id=f"CMD-{task.id}",
+        task_id=task.id,
+        platform_id=body.aircraft_id,
+        role=body.type.value,
+        target_entity_id=task.id,
+        mission_plan_id="MSN-GULF-PSAB-01",
+        latitude=body.lat,
+        longitude=body.lon,
+        reason=body.label or "in-mission task",
+        correlation_id="MSN-GULF-PSAB-01",
+    )
+    payload = planned.model_dump()
+    payload["uci"] = {
+        "messageType": "TaskCommand",
+        "xml": build_task_command_xml(cmd),
+        "feedback": {
+            "kind": "RETASK",
+            "title": f"{body.aircraft_id} retasked in mission",
+            "detail": f"{body.type.value} {task.id} accepted — re-propagating route",
+        },
+    }
+    return payload
 
 
 @app.post("/api/demo/insert-strike")
@@ -202,7 +328,7 @@ def export_routes(body: Optional[ExportRequest] = None):
     Uses ``option_id`` when provided; otherwise the planner's preferred
     Mission Option; otherwise the latest session plan.
     """
-    req = body or ExportRequest()
+    req = _export_request(body)
     plan = None
     resolved_id = None
     try:
@@ -511,6 +637,89 @@ def map_positions(t_min: float = 0.0, option_id: Optional[str] = None):
             }
         )
     return {"t_min": t_min, "positions": positions}
+
+
+@app.post("/api/region/ingest")
+def ingest_region(body: Optional[RegionIngestRequest] = None):
+    """Load fuzzy-reconciler fixed-threat region samples into the planning session."""
+    from .region_threats import resolve_region_path
+
+    req = body or RegionIngestRequest()
+    source = resolve_region_path(req.region, req.region_file, sibling=req.sibling)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"region fixture not found: {source}")
+    ingested = session.ingest_region_threats(
+        source, max_threats=req.max_threats, replace_demo_threats=req.replace_demo_threats
+    )
+    plan = session.run_plan_cycle() if req.run_plan else None
+    return {
+        "ingest": ingested,
+        "plan": plan.model_dump() if plan is not None else None,
+    }
+
+
+@app.get("/api/uci/export")
+def export_uci_plan(mission_plan_id: str = "MSN-GULF-PSAB-01"):
+    """UCI 2.5 MissionPlan + sub-plan XML for the shared bus."""
+    try:
+        xml = session.export_uci_mission_plan(mission_plan_id=mission_plan_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"missionPlanId": mission_plan_id, "xml": xml}
+
+
+@app.post("/api/uci/validate-oob")
+def validate_oob(body: ValidateOobRequest):
+    """OOB version bump → MissionPlanValidationCommand. Does not mutate RoutePlan."""
+    try:
+        return session.validate_against_oob(
+            order_of_battle_id=body.order_of_battle_id,
+            changed_entity_ids=body.changed_entity_ids,
+            mission_plan_id=body.mission_plan_id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/feedback/deviation")
+def plan_deviation(body: DeviationRequest):
+    """Compare a live position to the planned route (IxDF plan-vs-actual)."""
+    from .feedback import attention_item, execution_status
+    from .uci_messages import RoutePlan, Waypoint, build_mission_plan_execution_xml
+
+    planned = None
+    if session.latest is not None:
+        planned = next((p for p in session.latest.plans if p.aircraft_id == body.aircraft_id), None)
+    if planned is None or planned.route is None:
+        raise HTTPException(status_code=404, detail="No planned route for aircraft — POST /api/plan first")
+    route = RoutePlan(
+        route_plan_id=f"RP-{body.aircraft_id}",
+        platform_id=body.aircraft_id,
+        route_name=body.aircraft_id,
+        waypoints=[
+            Waypoint(wp.location.lat, wp.location.lon, name=wp.name or wp.id) for wp in planned.route.waypoints
+        ],
+    )
+    status = execution_status(
+        mission_plan_id=body.mission_plan_id,
+        route=route,
+        latitude=body.lat,
+        longitude=body.lon,
+        active_task_id=body.active_task_id,
+        planned_task_id=body.planned_task_id,
+        in_mission_retask=body.in_mission_retask,
+    )
+    return {
+        "status": {
+            "state": status.state,
+            "deviationSeverity": status.deviation_severity,
+            "crossTrackNm": status.cross_track_nm,
+            "detail": status.detail,
+            "inMissionRetask": status.in_mission_retask,
+        },
+        "attention": attention_item(status),
+        "xml": build_mission_plan_execution_xml(status),
+    }
 
 
 @app.post("/api/platforms/order")

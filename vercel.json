@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pip install .",
+  "functions": {
+    "src/omy_mission_plan/app.py": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "includeFiles": "{fixtures/**,src/omy_mission_plan/static/**,data/nav/**}"
+    }
+  }
+}

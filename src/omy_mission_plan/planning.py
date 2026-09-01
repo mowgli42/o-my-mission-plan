@@ -82,6 +82,10 @@ class PlanningSession:
         self.nav_source = str(nav.get("source") or "fixture")
         self.nav_notes = list(nav.get("notes") or [])
         self.threats = deepcopy(demo_world.THREATS)
+        self.fixed_threats: list = []
+        self.order_of_battle_id = ""
+        self.requirement_set_id = ""
+        self.last_validation_xml = ""
         self.aircraft = deepcopy(demo_world.AIRCRAFT)
         self.tasks = deepcopy(demo_world.TASKS)
         self.task_index: dict[str, Task] = {t.id: t for t in self.tasks}
@@ -345,6 +349,137 @@ class PlanningSession:
             self.last_export_paths = write_export_bundle(bundle, directory=directory)
             bundle = {**bundle, "written_paths": dict(self.last_export_paths)}
         return bundle
+
+    def ingest_region_threats(
+        self,
+        path: Path | str | None = None,
+        *,
+        max_threats: int = 16,
+        replace_demo_threats: bool = True,
+    ) -> dict[str, Any]:
+        """Load fuzzy-reconciler fixed threats into the live session.
+
+        Each site becomes a Threat, a Task (ISR or STRIKE), and a published
+        mission waypoint so the existing route generator can associate it
+        without inventing PROX-* points.
+        """
+        from .region_threats import (
+            default_fixture_path,
+            load_region_file,
+            threats_from_region,
+            to_demo_threat,
+            to_mission_fix,
+            to_task,
+        )
+
+        source = Path(path) if path else default_fixture_path()
+        data = load_region_file(source)
+        fixed = threats_from_region(data, max_threats=max_threats)
+        demo_threats = [to_demo_threat(item) for item in fixed]
+        self.fixed_threats = list(fixed)
+        self.order_of_battle_id = f"OOB-{source.stem.upper()}"
+        self.requirement_set_id = f"REQ-{self.order_of_battle_id}"
+        self.threats = demo_threats if replace_demo_threats else list(self.threats) + demo_threats
+        added_tasks = 0
+        for item in fixed:
+            task = to_task(item)
+            if task.id not in self.task_index:
+                self.tasks.append(task)
+                self.task_index[task.id] = task
+                added_tasks += 1
+            fix = to_mission_fix(item)
+            self.mission_waypoints[fix.id] = fix
+        self.latest = None
+        return {
+            "source": str(source),
+            "region": (data.get("meta") or {}).get("region"),
+            "threats_ingested": len(fixed),
+            "tasks_added": added_tasks,
+            "tasks_total": len(self.tasks),
+            "mission_waypoints": len(self.mission_waypoints),
+        }
+
+    def export_uci_mission_plan(self, *, mission_plan_id: str = "MSN-GULF-PSAB-01") -> dict[str, str]:
+        if self.latest is None:
+            raise RuntimeError("No plan yet — run a plan cycle first")
+        from .uci_export import plans_to_uci
+
+        return plans_to_uci(
+            self.latest,
+            self.tasks,
+            mission_plan_id=mission_plan_id,
+            fixed_threats=self.fixed_threats,
+            order_of_battle_id=self.order_of_battle_id,
+            requirement_set_id=self.requirement_set_id,
+        )
+
+    def route_waypoint_fingerprint(self) -> dict[str, list[tuple[float, float]]]:
+        """Lat/lon of published RoutePlan waypoints — used to prove OOB validation does not mutate."""
+        if self.latest is None:
+            return {}
+        out: dict[str, list[tuple[float, float]]] = {}
+        for planned in self.latest.plans:
+            if planned.route is None:
+                continue
+            out[planned.aircraft_id] = [
+                (round(wp.location.lat, 5), round(wp.location.lon, 5)) for wp in planned.route.waypoints
+            ]
+        return out
+
+    def validate_against_oob(
+        self,
+        *,
+        order_of_battle_id: str,
+        changed_entity_ids: list[str],
+        mission_plan_id: str = "MSN-GULF-PSAB-01",
+    ) -> dict[str, Any]:
+        """Emit MissionPlanValidationCommand. Never rewrite RoutePlan waypoints in place."""
+        if self.latest is None:
+            raise RuntimeError("No plan yet — run a plan cycle first")
+        from .uci_messages import (
+            MissionPlanStatus,
+            MissionPlanValidationCommand,
+            build_mission_plan_status_xml,
+            build_mission_plan_validation_xml,
+        )
+
+        fingerprints = self.route_waypoint_fingerprint()
+        planned_ids = {
+            t.target_entity_id or t.id
+            for t in self.tasks
+            if t.target_entity_id or t.id
+        }
+        intersects = bool(set(changed_entity_ids) & planned_ids)
+        cmd = MissionPlanValidationCommand(
+            mission_plan_id=mission_plan_id,
+            reason="ORDER_OF_BATTLE",
+            order_of_battle_id=order_of_battle_id,
+            changed_entity_ids=list(changed_entity_ids),
+            correlation_id=mission_plan_id,
+        )
+        status = MissionPlanStatus(
+            mission_plan_id=mission_plan_id,
+            state="INVALID" if intersects else "PLANNED",
+            detail="OOB version changed planned threat entities" if intersects else "OOB change does not intersect plan",
+            correlation_id=mission_plan_id,
+        )
+        xml = {
+            "MissionPlanValidationCommand": build_mission_plan_validation_xml(cmd),
+            "MissionPlanStatus": build_mission_plan_status_xml(status),
+        }
+        self.last_validation_xml = xml["MissionPlanValidationCommand"]
+        self.order_of_battle_id = order_of_battle_id
+        return {
+            "messageType": "MissionPlanValidationCommand",
+            "missionPlanId": mission_plan_id,
+            "orderOfBattleId": order_of_battle_id,
+            "state": status.state,
+            "routesUnchanged": True,
+            "routePlanFingerprints": {
+                aid: [{"lat": lat, "lon": lon} for lat, lon in pts] for aid, pts in fingerprints.items()
+            },
+            "xml": xml,
+        }
 
     def routes_overview(self) -> dict[str, Any]:
         """Battlespace / debrief-aligned routes overview payload."""
