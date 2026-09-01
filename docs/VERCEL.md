@@ -6,7 +6,7 @@ ingested at startup and planned automatically.
 
 | Concern | Demo behavior |
 |---------|----------------|
-| API | Stateless FastAPI serverless function (`api/index.py`) |
+| API | Stateless FastAPI serverless function (`src/omy_mission_plan/app.py`) |
 | UI | Vanilla static assets served by FastAPI (`/` + `/assets/*`) |
 | Gulf EOB | Auto-ingested on boot when `VERCEL=1` (override with `INGEST_GULF_EOB`) |
 | Session state | In-memory per instance — cold starts reset; fine for demo |
@@ -18,7 +18,7 @@ ingested at startup and planned automatically.
 3. Leave settings at defaults from `vercel.json` / `pyproject.toml`:
    - **Root Directory:** repository root (`.`)
    - **Install:** `pip install .`
-   - **Entrypoint:** `[tool.vercel] entrypoint = "api.index:app"`
+   - **Entrypoint:** `[tool.vercel] entrypoint = "src.omy_mission_plan.app:app"`
 4. No secrets required for the demo.
 5. Deploy. Production URL serves UI + `/api/*` same-origin.
 

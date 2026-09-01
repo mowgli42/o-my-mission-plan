@@ -28,7 +28,7 @@ where = ["src"]
 omy_mission_plan = ["static/*"]
 
 [tool.vercel]
-entrypoint = "api.index:app"
+entrypoint = "src.omy_mission_plan.app:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
