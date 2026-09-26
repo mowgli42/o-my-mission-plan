@@ -49,3 +49,7 @@ playwright-report/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Secrets (never commit private keys)
+*-key.pem
+*.key
