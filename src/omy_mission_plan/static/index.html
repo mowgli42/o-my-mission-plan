@@ -55,10 +55,32 @@
             <span id="scenario-badge" class="badge badge-idle">gulf-war-psab-001</span>
           </div>
           <div class="map-toolbar" role="toolbar" aria-label="Map layers">
-            <label class="toggle"><input type="checkbox" id="tog-costgrid" /> Cost grid</label>
-            <label class="toggle"><input type="checkbox" id="tog-threats" checked /> Threats</label>
+            <label class="toggle"><input type="checkbox" id="tog-costgrid" /> Cost field</label>
+            <label class="toggle"><input type="checkbox" id="tog-rings" /> Vector rings</label>
+            <label class="toggle"><input type="checkbox" id="tog-threats" checked /> Threat points</label>
             <label class="toggle"><input type="checkbox" id="tog-routes" checked /> Routes</label>
             <label class="toggle"><input type="checkbox" id="tog-scrub-ac" checked /> Aircraft on route</label>
+            <label class="field-ctrl">Cell
+              <select id="sel-cell-nmi" title="Cost field cell size (nmi)">
+                <option value="30">30 nmi</option>
+                <option value="45" selected>45 nmi</option>
+                <option value="60">60 nmi</option>
+                <option value="90">90 nmi</option>
+              </select>
+            </label>
+            <label class="field-ctrl">Style
+              <select id="sel-cell-style" title="Hex or square cells">
+                <option value="hex" selected>Hex</option>
+                <option value="square">Square</option>
+              </select>
+            </label>
+            <label class="field-ctrl">Alt
+              <select id="sel-altitude" title="Display-only altitude (2-D field for now)">
+                <option value="10000" selected>FL100</option>
+                <option value="5000">FL050</option>
+                <option value="20000">FL200</option>
+              </select>
+            </label>
             <span id="nav-source-badge" class="badge badge-idle" title="NAV_SOURCE">nav: fixture</span>
           </div>
           <div id="status-strip" class="status-strip" aria-live="polite">
@@ -70,7 +92,7 @@
           <div class="map-frame" id="map-frame">
             <svg id="map" viewBox="0 0 640 520" role="img" aria-label="Gulf War planning map"></svg>
           </div>
-          <div class="legend">
+          <div class="legend" id="map-legend">
             <span><i class="airbase"></i>Airbase</span>
             <span><i class="navaid"></i>Navaid</span>
             <span><i class="mission"></i>Mission fix</span>
@@ -78,7 +100,16 @@
             <span><i class="strike"></i>Strike</span>
             <span><i class="threat"></i>Threat</span>
             <span><i class="route"></i>Route</span>
-            <span><i class="costgrid"></i>Cost</span>
+          </div>
+          <div id="cost-legend" class="cost-legend" hidden aria-label="Threat weather cost field legend">
+            <div class="cost-legend-head">Threat weather · aggregation = <strong>max</strong></div>
+            <div class="cost-legend-ramp" role="group" aria-label="Intensity levels">
+              <button type="button" class="cost-band" data-level="LOW" title="Filter LOW"><i class="band-low"></i>LOW</button>
+              <button type="button" class="cost-band" data-level="MEDIUM" title="Filter MEDIUM"><i class="band-med"></i>MEDIUM</button>
+              <button type="button" class="cost-band" data-level="HIGH" title="Filter HIGH"><i class="band-high"></i>HIGH</button>
+              <button type="button" class="cost-band" data-level="CRITICAL" title="Filter CRITICAL"><i class="band-crit"></i>CRITICAL</button>
+            </div>
+            <p class="hint cost-legend-note">Click a band to highlight. Clear / jam / lethal rings are a separate toggle.</p>
           </div>
           <div id="exposure-panel" class="exposure-panel" aria-live="polite"></div>
         </section>
@@ -227,8 +258,19 @@
           </header>
           <div class="drawer-grid">
             <section class="map-panel">
-              <div class="map-frame tall">
-                <svg id="detail-map" viewBox="0 0 640 520" role="img" aria-label="Route map with threats"></svg>
+              <div class="detail-map-stack">
+                <div class="map-frame tall">
+                  <svg id="detail-map" viewBox="0 0 640 520" role="img" aria-label="Route map with threats"></svg>
+                </div>
+                <div class="inset-overview" aria-label="Theater cost field overview">
+                  <div class="inset-label">Theater field</div>
+                  <svg id="detail-inset" viewBox="0 0 640 520" role="img" aria-label="Inset theater cost field"></svg>
+                </div>
+              </div>
+              <div class="legend exposure-bands" aria-label="Route exposure bands">
+                <span><i class="band-clear"></i>Clear</span>
+                <span><i class="band-jam"></i>Jam</span>
+                <span><i class="band-lethal"></i>Lethal</span>
               </div>
               <div id="detail-segment-timeline" class="segment-timeline" aria-label="Route segment timeline"></div>
             </section>

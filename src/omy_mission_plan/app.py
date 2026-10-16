@@ -558,11 +558,25 @@ def list_archetypes():
 
 
 @app.get("/api/map/costgrid")
-def map_costgrid(cell_nmi: float = 45.0):
-    """Hex-like cost field from theater threats (display only)."""
+def map_costgrid(
+    cell_nmi: float = 45.0,
+    cell_style: str = "hex",
+    altitude_ft: Optional[float] = None,
+):
+    """Solid cost field from theater threats (display only; pairs with costgrid supplier)."""
     from .map_layers import build_hex_costgrid
 
-    return build_hex_costgrid(session.threats, cell_nmi=cell_nmi)
+    style = (cell_style or "hex").lower()
+    if style not in ("hex", "square"):
+        raise HTTPException(status_code=400, detail="cell_style must be hex or square")
+    if cell_nmi < 15 or cell_nmi > 120:
+        raise HTTPException(status_code=400, detail="cell_nmi must be between 15 and 120")
+    return build_hex_costgrid(
+        session.threats,
+        cell_nmi=cell_nmi,
+        cell_style=style,
+        altitude_ft=altitude_ft,
+    )
 
 
 @app.get("/api/map/exposure")

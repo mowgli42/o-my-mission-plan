@@ -99,6 +99,22 @@ def test_costgrid_and_exposure_and_timeline_apis():
     assert cg["aggregation"] == "max"
     assert cg["cell_count"] > 0
     assert set(cg["levels"]) >= {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+    assert cg.get("cell_style") == "hex"
+    assert "color_ramp" in cg
+    assert cg["color_ramp"]["CRITICAL"] == "#e74c3c"
+
+    sq = client.get("/api/map/costgrid?cell_nmi=60&cell_style=square&altitude_ft=20000").json()
+    assert sq["cell_style"] == "square"
+    assert sq["cell_nmi"] == 60
+    assert sq["altitude_ft"] == 20000
+    assert sq["aggregation"] == "max"
+    assert sq["cell_count"] > 0
+    # Square cells have 4 vertices; hex has 6.
+    assert len(sq["cells"][0]["vertices"]) == 4
+    assert len(cg["cells"][0]["vertices"]) == 6
+
+    bad = client.get("/api/map/costgrid?cell_style=triangle")
+    assert bad.status_code == 400
 
     exp = client.get("/api/map/exposure").json()
     assert exp["sees_mode"] == "jam_or_lethal"
@@ -129,6 +145,16 @@ def test_platform_order_api():
 def test_ui_has_new_controls():
     html = client.get("/").text
     assert "tog-costgrid" in html
+    assert "tog-rings" in html
+    assert "sel-cell-style" in html
+    assert "sel-altitude" in html
+    assert "cost-legend" in html
+    assert "detail-inset" in html
     assert "Aligned timeline" in html
     assert "Group by type" in html
-    assert "Cost grid" in html
+    assert "Cost field" in html
+    js = client.get("/assets/app.js").text
+    assert 'stroke="none"' in js
+    assert "COST_RAMP" in js
+    assert "ringsOnlyHover" in js
+    assert "aggregation = <strong>max</strong>" in html
