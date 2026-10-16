@@ -52,10 +52,166 @@ const BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
-function project(lat, lon) {
+/* ---------- Base map (o-my suite shared dark tiles) ---------- */
+
+/**
+ * o-my suite shared dark base map. Same values as o-my-debrief
+ * `frontend/src/lib/basemap.js` (reference) and the battlespace-manager copies;
+ * see o-my-debrief docs/SHARED-DARK-MAP.md before changing anything here.
+ *
+ * Esri World Dark Gray Canvas (base + reference labels): key-free from any
+ * origin, dark, regional scale. CartoDB Dark Matter was the original pick but
+ * CARTO watermarks every un-keyed tile since Sept 2026, so it is no longer
+ * usable without committing a key.
+ *
+ * `opacity` over the dark console background (see `.leaflet-container`) pulls
+ * Esri's mid-gray canvas down to the ops-console palette.
+ */
+const SUITE_DARK_TILES = Object.freeze({
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  attribution: "&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors",
+  maxZoom: 12,
+  opacity: 0.65,
+});
+const SUITE_DARK_LABELS = Object.freeze({
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+  maxZoom: SUITE_DARK_TILES.maxZoom,
+  opacity: 0.45,
+});
+const THEATER_BOUNDS = [
+  [BOUNDS.minLat, BOUNDS.minLon],
+  [BOUNDS.maxLat, BOUNDS.maxLon],
+];
+const THEATER_FIT = { padding: [6, 6], animate: false };
+const hasLeaflet = typeof window !== "undefined" && typeof window.L !== "undefined";
+
+/** Fixed equirectangular projection onto the legacy 640x520 canvas (offline fallback only). */
+function projectFixed(lat, lon) {
   const x = ((lon - BOUNDS.minLon) / (BOUNDS.maxLon - BOUNDS.minLon)) * 600 + 20;
   const y = ((BOUNDS.maxLat - lat) / (BOUNDS.maxLat - BOUNDS.minLat)) * 480 + 20;
   return [x, y];
+}
+
+/**
+ * Leaflet SVG renderer with one extra <g> that the string-built plan overlays
+ * (cost field, rings, routes, markers) are written into. Leaflet keeps the
+ * svg positioned / viewBoxed in layer-point space across pan and zoom and fires
+ * `update` when overlays must be re-projected.
+ */
+const PlanOverlayRenderer = hasLeaflet
+  ? L.SVG.extend({
+      _initContainer() {
+        L.SVG.prototype._initContainer.call(this);
+        this._planGroup = L.SVG.create("g");
+        this._planGroup.setAttribute("class", "plan-overlay");
+        this._container.appendChild(this._planGroup);
+      },
+      planGroup() {
+        return this._planGroup;
+      },
+    })
+  : null;
+
+/**
+ * Per-container map context:
+ * { map, group, project, lastOpts, redraw, home: { bounds, options }, autoFit }
+ * `autoFit` keeps the map on `home` through container resizes until the user
+ * pans or zooms (the plan frame shrinks once the panels below it render).
+ */
+const mapCtxs = new Map();
+
+function createBaseMap(el, { interactive = true } = {}) {
+  const map = L.map(el, {
+    maxZoom: SUITE_DARK_TILES.maxZoom,
+    minZoom: 4,
+    zoomSnap: 0.25,
+    zoomControl: interactive,
+    attributionControl: interactive,
+    dragging: interactive,
+    scrollWheelZoom: interactive,
+    doubleClickZoom: interactive,
+    boxZoom: interactive,
+    keyboard: interactive,
+    touchZoom: interactive,
+  });
+  L.tileLayer(SUITE_DARK_TILES.url, SUITE_DARK_TILES).addTo(map);
+  L.tileLayer(SUITE_DARK_LABELS.url, SUITE_DARK_LABELS).addTo(map);
+  // Layers (including the overlay renderer) only attach once the map has a view.
+  map.fitBounds(THEATER_BOUNDS, THEATER_FIT);
+  return map;
+}
+
+function fitHome(ctx) {
+  if (!ctx?.map || !ctx.home?.bounds) return;
+  ctx.map.fitBounds(ctx.home.bounds, ctx.home.options || THEATER_FIT);
+}
+
+function getMapCtx(sel) {
+  const el = $(sel);
+  if (!el) return null;
+  let ctx = mapCtxs.get(sel);
+  if (ctx) return ctx;
+
+  if (!hasLeaflet) {
+    // Leaflet CDN unavailable: keep the overlays alive on a plain SVG.
+    el.innerHTML = `<svg class="fallback-svg" viewBox="0 0 640 520"><g class="plan-overlay"></g></svg>`;
+    ctx = { map: null, group: el.querySelector("g"), project: projectFixed, lastOpts: null };
+    mapCtxs.set(sel, ctx);
+    return ctx;
+  }
+
+  const interactive = !el.closest(".inset-overview");
+  const map = createBaseMap(el, { interactive });
+  const renderer = new PlanOverlayRenderer({ padding: 0.5 }).addTo(map);
+  ctx = {
+    map,
+    group: renderer.planGroup(),
+    project(lat, lon) {
+      const p = map.latLngToLayerPoint([lat, lon]);
+      return [p.x, p.y];
+    },
+    lastOpts: null,
+    home: { bounds: THEATER_BOUNDS, options: THEATER_FIT },
+    autoFit: true,
+  };
+  ctx.redraw = () => {
+    if (ctx.lastOpts) renderMap(sel, ctx.lastOpts);
+  };
+  renderer.on("update", ctx.redraw);
+
+  if (interactive) {
+    const userTouched = () => {
+      ctx.autoFit = false;
+    };
+    el.addEventListener("pointerdown", userTouched);
+    el.addEventListener("wheel", userTouched, { passive: true });
+    el.addEventListener("keydown", userTouched);
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => {
+      if (!el.clientWidth || !el.clientHeight) return;
+      map.invalidateSize({ animate: false });
+      if (ctx.autoFit) fitHome(ctx);
+    }).observe(el);
+  }
+  mapCtxs.set(sel, ctx);
+  return ctx;
+}
+
+function fitTheater(sel = "#map") {
+  const ctx = mapCtxs.get(sel);
+  if (!ctx?.map) return;
+  ctx.home = { bounds: THEATER_BOUNDS, options: THEATER_FIT };
+  ctx.autoFit = true;
+  ctx.map.fitBounds(THEATER_BOUNDS, { padding: [6, 6] });
+}
+
+/** Call after a hidden map container becomes visible / changes size. */
+function refreshMapSize(sel) {
+  const ctx = mapCtxs.get(sel);
+  if (!ctx?.map) return;
+  ctx.map.invalidateSize({ animate: false });
+  if (ctx.autoFit) fitHome(ctx);
 }
 
 function toast(message, kind = "info") {
@@ -304,8 +460,8 @@ function syncCostLegend() {
   });
 }
 
-function nmToSvgRadius(lat, lon, radiusNmi) {
-  const [x0, y0] = project(lat, lon);
+function nmToSvgRadius(project, lat, lon, radiusNmi) {
+  const [x0] = project(lat, lon);
   const [x1] = project(lat, lon + radiusNmi / (60 * Math.cos((lat * Math.PI) / 180)));
   return Math.max(4, Math.abs(x1 - x0));
 }
@@ -350,11 +506,14 @@ function legExposureBand(leg) {
   return "CLEAR";
 }
 
-function renderMap(svgSel = "#map", opts = {}) {
-  const svg = $(svgSel);
+function renderMap(mapSel = "#map", opts = {}) {
+  const ctx = getMapCtx(mapSel);
+  if (!ctx) return;
+  ctx.lastOpts = opts;
+  const { group: svg, project } = ctx;
   const w = state.world;
-  if (!svg || !w) {
-    if (svg) svg.innerHTML = "";
+  if (!w) {
+    svg.innerHTML = "";
     return;
   }
   const showThreatPoints = opts.showThreats !== false && state.showThreats !== false;
@@ -366,10 +525,7 @@ function renderMap(svgSel = "#map", opts = {}) {
   const costOpacity = opts.costOpacity;
   const exposureMode = opts.exposureMode === true || (opts.route && state.routeExposureMode);
   const parts = [];
-  // z-order: land silhouette → cost field → rings → navaids/fixes → routes → markers → labels
-  parts.push(`
-    <path d="M80,460 C140,430 180,380 220,300 C260,220 300,160 360,120 C420,80 480,70 540,90 C560,140 550,220 520,280 C490,340 450,400 400,440 C340,480 200,500 80,460 Z"
-      fill="rgba(61,214,198,0.04)" stroke="rgba(61,214,198,0.18)" stroke-width="1.5"/>`);
+  // z-order (above the dark tile base): cost field → rings → navaids/fixes → routes → markers → labels
 
   if (showCostgrid && state.costgrid?.cells?.length) {
     const groupOpacity = costOpacity != null ? ` opacity="${costOpacity}"` : "";
@@ -410,12 +566,12 @@ function renderMap(svgSel = "#map", opts = {}) {
     const lat = loc.lat ?? th.latitude;
     const lon = loc.lon ?? th.longitude;
     const [x, y] = project(lat, lon);
-    const jamR = nmToSvgRadius(lat, lon, th.jam_radius_nmi || 160);
-    const lethR = nmToSvgRadius(lat, lon, th.lethal_radius_nmi || 50);
+    const jamR = nmToSvgRadius(project, lat, lon, th.jam_radius_nmi || 160);
+    const lethR = nmToSvgRadius(project, lat, lon, th.lethal_radius_nmi || 50);
     const isActive = activeThreatId === th.id;
     const drawRings =
       showRings && (!ringsOnlyHover || isActive);
-    parts.push(`<g class="threat-g" data-threat="${th.id}" style="cursor:pointer">`);
+    parts.push(`<g class="threat-g" data-threat="${th.id}">`);
     if (drawRings) {
       // Thin rings only — no fill wash that muddies the solid field.
       parts.push(`
@@ -746,6 +902,27 @@ function renderDetailMaps(route) {
   });
 }
 
+function routeBounds(route) {
+  if (!hasLeaflet) return null;
+  const pts = (route.waypoints || [])
+    .map((wp) => [wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon])
+    .filter(([la, lo]) => Number.isFinite(la) && Number.isFinite(lo));
+  return pts.length ? L.latLngBounds(pts).pad(0.25) : null;
+}
+
+function fitDetailMaps(route) {
+  const detail = mapCtxs.get("#detail-map");
+  const b = detail && routeBounds(route);
+  if (detail && b) {
+    detail.home = { bounds: b, options: { maxZoom: 9, animate: false } };
+    detail.autoFit = true;
+  }
+  const inset = mapCtxs.get("#detail-inset");
+  if (inset) inset.home = { bounds: THEATER_BOUNDS, options: { padding: [2, 2], animate: false } };
+  refreshMapSize("#detail-map");
+  refreshMapSize("#detail-inset");
+}
+
 function openDetails() {
   const r = selectedRoute();
   if (!r) return;
@@ -762,6 +939,7 @@ function openDetails() {
     : loadCostgrid(true);
   ensureField.then(() => {
     renderDetailMaps(r);
+    fitDetailMaps(r);
     renderDetailThreats(r);
     renderDetailTasks(r);
     renderSegmentTimeline(r);
@@ -896,6 +1074,7 @@ function setView(name) {
     p.hidden = !on;
     p.classList.toggle("active", on);
   });
+  if (name === "plan") refreshMapSize("#map");
 }
 
 function setPlanReady(ready) {
@@ -1369,6 +1548,7 @@ function wire() {
     if (state.showCostgrid) await loadCostgrid();
     refreshMap();
   });
+  $("#btn-fit-theater")?.addEventListener("click", () => fitTheater("#map"));
   $("#tog-rings")?.addEventListener("change", (e) => {
     state.showRings = e.target.checked;
     refreshMap();
