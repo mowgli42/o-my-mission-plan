@@ -21,6 +21,16 @@ Work **in this order**. Hub: `docs/UCI-CONTRACTS.md`. Gaps: `docs/UCI-GAPS.md`.
 
 Sibling beads (other repos): `fr-osm` → `fr-76d`; `o-my-sim-u1n.1` → `.2` → `.3`; `o-my-59k.1` → `.2` → `.3`; `battlespace-manager-5xt.1` → `.2` → `.3`; `omd-50m`.
 
+## Epic (pending GH) — Clear threat weather displays
+
+OpenSpec change: `openspec/changes/clear-threat-display/`
+Gherkin: `features/clear-threat-display.feature`
+Mockup notes: `docs/mockups/README.md`
+
+Option 1 solid weather-radar field + Option 4 route-exposure focus + additional directions (rendering contract, aggregation, toggles, altitude readiness, legend, consistency).
+
+Create GH epic + children, then link beads when `bd` is available. Related existing issue: #15.
+
 ## Workflow
 
 ```bash
