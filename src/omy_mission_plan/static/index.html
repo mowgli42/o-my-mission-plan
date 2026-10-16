@@ -4,6 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>o-my Mission Plan</title>
+    <!-- Suite dark base map: Leaflet 1.9.4 (pinned, SRI) + CartoDB Dark Matter tiles, no API key. -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -81,6 +93,7 @@
                 <option value="20000">FL200</option>
               </select>
             </label>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-fit-theater" title="Reset map to the PSAB → Kuwait / Iraq theater">Theater</button>
             <span id="nav-source-badge" class="badge badge-idle" title="NAV_SOURCE">nav: fixture</span>
           </div>
           <div id="status-strip" class="status-strip" aria-live="polite">
@@ -90,7 +103,7 @@
             <div class="stat"><span class="stat-label">Idle aircraft</span><span id="stat-idle" class="stat-value">—</span></div>
           </div>
           <div class="map-frame" id="map-frame">
-            <svg id="map" viewBox="0 0 640 520" role="img" aria-label="Gulf War planning map"></svg>
+            <div id="map" class="base-map" role="application" aria-label="Gulf War planning map"></div>
           </div>
           <div class="legend" id="map-legend">
             <span><i class="airbase"></i>Airbase</span>
@@ -260,11 +273,11 @@
             <section class="map-panel">
               <div class="detail-map-stack">
                 <div class="map-frame tall">
-                  <svg id="detail-map" viewBox="0 0 640 520" role="img" aria-label="Route map with threats"></svg>
+                  <div id="detail-map" class="base-map" role="application" aria-label="Route map with threats"></div>
                 </div>
                 <div class="inset-overview" aria-label="Theater cost field overview">
                   <div class="inset-label">Theater field</div>
-                  <svg id="detail-inset" viewBox="0 0 640 520" role="img" aria-label="Inset theater cost field"></svg>
+                  <div id="detail-inset" class="base-map" role="img" aria-label="Inset theater cost field"></div>
                 </div>
               </div>
               <div class="legend exposure-bands" aria-label="Route exposure bands">

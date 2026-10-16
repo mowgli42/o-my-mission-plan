@@ -354,11 +354,67 @@ a {
   min-height: 420px;
 }
 
-.map-frame svg {
+/* Leaflet host fills the frame; the frame keeps the min-height so Leaflet
+   always has a definite size (also when the drawer map is created lazily). */
+.map-frame .base-map {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- Suite dark base map (Leaflet + CartoDB Dark Matter) ---- */
+.leaflet-container {
+  background: var(--bg-deep);
+  font-family: var(--mono);
+  outline: none;
+}
+.leaflet-container .leaflet-control-attribution {
+  background: rgba(11, 18, 32, 0.78);
+  color: var(--faint);
+  font-size: 10px;
+  padding: 0 5px;
+}
+.leaflet-container .leaflet-control-attribution a {
+  color: var(--muted);
+}
+.leaflet-bar {
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.leaflet-bar a,
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+  background: var(--bg-2);
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+.leaflet-bar a.leaflet-disabled {
+  background: var(--bg-1);
+  color: var(--faint);
+}
+/* Plan overlays live in one <g> inside Leaflet's SVG renderer. The root svg
+   is pointer-events:none (Leaflet default); only threats opt back in. */
+.plan-overlay text {
+  pointer-events: none;
+  user-select: none;
+  paint-order: stroke;
+  stroke: rgba(6, 10, 18, 0.85);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+.plan-overlay .threat-g {
+  pointer-events: visiblePainted;
+  cursor: pointer;
+}
+/* Offline fallback (Leaflet CDN unavailable): plain SVG at theater extent. */
+.base-map > svg.fallback-svg {
   width: 100%;
   height: 100%;
-  min-height: 420px;
   display: block;
+}
+.btn-sm {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  font-family: var(--mono);
 }
 
 .legend {
@@ -865,7 +921,8 @@ a {
 }
 .map-frame.tall {
   flex: 1;
-  min-height: 320px;
+  min-height: 420px;
+  height: 48vh;
   border-radius: 0;
   border: none;
   border-bottom: 1px solid var(--line);
@@ -1298,10 +1355,10 @@ a {
   padding: 0.15rem 0.3rem 0;
   text-transform: uppercase;
 }
-.inset-overview svg {
+.inset-overview .base-map {
   display: block;
   width: 100%;
-  height: auto;
+  aspect-ratio: 640 / 520;
 }
 .sev-badge {
   display: inline-block;

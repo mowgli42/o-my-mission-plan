@@ -29,7 +29,9 @@ Captured from the live Plan / Options / Routes console after a plan cycle
 
 Non-overlapping hex (or square) cells with a green → yellow → orange → red
 ramp. Cost field, vector rings, and threat points are independent toggles;
-legend documents **max** aggregation.
+legend documents **max** aggregation. Overlays sit on the suite's shared
+key-free dark base map (Leaflet, zoom capped at 12 — see
+[`docs/SHARED-DARK-MAP.md`](docs/SHARED-DARK-MAP.md)); **Theater** resets the view.
 
 ![Plan PSAB world — solid threat weather field](docs/screenshots/01-plan-psab-world.png)
 
@@ -181,6 +183,7 @@ The live demo auto-loads the bundled **fuzzy-reconciler Gulf War EOB**
 | Dark-theme IxDF planning UI | Done |
 | Routes overview (battlespace table + debrief timeline) | Done |
 | Route details drawer (map + threats + tasks) | Done |
+| Shared dark base map (Leaflet + key-free dark tiles, demo zoom cap) | Done (`docs/SHARED-DARK-MAP.md`) |
 | Solid weather-radar cost field + route-exposure UI | Done (hex/square field, rings toggle, inset overview) |
 | Pluggable route suppliers (`ROUTE_SUPPLIER`) | Done (fallback + ORF graph spike + cost-grid avoids) |
 | CONOPS Mission Options A/B/C + compare / re-run | Done |
@@ -261,6 +264,7 @@ Set `NAV_SOURCE=fixture|xplane` for theater navaid density (default `fixture`; e
 - [`docs/UCI-GAPS.md`](docs/UCI-GAPS.md) — UCI 2.5 / A-GRA messages we should use but do not yet
 - [`docs/UCI-MESSAGE-INTERACTIONS.md`](docs/UCI-MESSAGE-INTERACTIONS.md) — catalog element ↔ topic matrix
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end stack map
+- [`docs/SHARED-DARK-MAP.md`](docs/SHARED-DARK-MAP.md) — suite dark base-map convention (tiles, zoom cap, attribution)
 - [`docs/IXDF-FEEDBACK.md`](docs/IXDF-FEEDBACK.md) — plan-vs-actual / retask UI contract
 - [`docs/OMY-SIM-ROUTES.md`](docs/OMY-SIM-ROUTES.md) — JSON export companion for o-my-sim
 - [`docs/examples/gulf-war-psab-001-routes-example.json`](docs/examples/gulf-war-psab-001-routes-example.json) — sample bundle
