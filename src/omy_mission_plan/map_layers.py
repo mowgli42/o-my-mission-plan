@@ -25,6 +25,38 @@ def _haversine_nmi(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 SEVERITY_WEIGHT = {"LOW": 1.0, "MEDIUM": 2.0, "HIGH": 3.5, "CRITICAL": 5.0}
 
 
+def _cell_vertices(
+    lat: float,
+    lon: float,
+    dlat: float,
+    dlon: float,
+    *,
+    cell_style: str,
+) -> list[list[float]]:
+    """Non-overlapping cell polygon in [lat, lon] pairs."""
+    style = (cell_style or "hex").lower()
+    if style == "square":
+        # Half-steps leave a tiny gap avoided by using 0.49 so adjacent cells
+        # abut without stacking alpha through overlaps.
+        hx, hy = dlon * 0.49, dlat * 0.49
+        return [
+            [lat - hy, lon - hx],
+            [lat - hy, lon + hx],
+            [lat + hy, lon + hx],
+            [lat + hy, lon - hx],
+        ]
+    # Flat-top hex (default) — sized to abut without overlap.
+    rx, ry = dlon * 0.48, dlat * 0.55
+    return [
+        [lat, lon + rx],
+        [lat + ry * 0.5, lon + rx * 0.5],
+        [lat + ry * 0.5, lon - rx * 0.5],
+        [lat, lon - rx],
+        [lat - ry * 0.5, lon - rx * 0.5],
+        [lat - ry * 0.5, lon + rx * 0.5],
+    ]
+
+
 def build_hex_costgrid(
     threats: list[Threat],
     *,
@@ -33,21 +65,30 @@ def build_hex_costgrid(
     min_lon: float = 43.5,
     max_lon: float = 51.5,
     cell_nmi: float = 45.0,
+    cell_style: str = "hex",
+    altitude_ft: Optional[float] = None,
 ) -> dict[str, Any]:
     """
-    Coarse hex-like lattice of cost cells (performant).
+    Coarse lattice of cost cells (performant hex or square).
 
     Intensity per cell = max overlapping threat contribution
     (severity weight × falloff inside jam radius). Documented choice: max, not sum.
+
+    altitude_ft is display-contract metadata only until stacked layers exist;
+    the 2-D field does not yet vary by altitude.
     """
+    style = (cell_style or "hex").lower()
+    if style not in ("hex", "square"):
+        style = "hex"
     # Approximate degrees per nmi
     dlat = cell_nmi / 60.0
     dlon = cell_nmi / (60.0 * max(0.5, math.cos(math.radians((min_lat + max_lat) / 2))))
     cells: list[dict[str, Any]] = []
     row = 0
     lat = min_lat
+    lat_step = dlat if style == "square" else dlat * 0.75
     while lat <= max_lat:
-        lon0 = min_lon + (0.5 * dlon if row % 2 else 0.0)
+        lon0 = min_lon + (0.5 * dlon if (style == "hex" and row % 2) else 0.0)
         lon = lon0
         while lon <= max_lon:
             intensity = 0.0
@@ -63,16 +104,7 @@ def build_hex_costgrid(
                     intensity = contrib
                     level = (th.severity or "MEDIUM").upper()
             if intensity > 0:
-                # Flat-top hex vertices in lat/lon approx
-                rx, ry = dlon * 0.48, dlat * 0.55
-                verts = [
-                    [lat, lon + rx],
-                    [lat + ry * 0.5, lon + rx * 0.5],
-                    [lat + ry * 0.5, lon - rx * 0.5],
-                    [lat, lon - rx],
-                    [lat - ry * 0.5, lon - rx * 0.5],
-                    [lat - ry * 0.5, lon + rx * 0.5],
-                ]
+                verts = _cell_vertices(lat, lon, dlat, dlon, cell_style=style)
                 cells.append(
                     {
                         "lat": round(lat, 4),
@@ -83,17 +115,33 @@ def build_hex_costgrid(
                     }
                 )
             lon += dlon
-        lat += dlat * 0.75
+        lat += lat_step
         row += 1
 
     return {
         "cell_nmi": cell_nmi,
+        "cell_style": style,
+        "altitude_ft": altitude_ft,
+        "altitude_note": (
+            "Display-only altitude selector; field is still a single 2-D layer "
+            "until Option B stacked layers are implemented."
+        ),
         "aggregation": "max",
+        "aggregation_note": (
+            "Intensity = max overlapping threat contribution "
+            "(severity weight × jam-radius falloff), not sum."
+        ),
         "sees_mode_note": (
             "Cost field uses jam-radius soft falloff × severity weight; "
             "pairs with ROUTE_SUPPLIER=costgrid pathing but does not change geometry alone."
         ),
         "levels": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        "color_ramp": {
+            "LOW": "#2ecc71",
+            "MEDIUM": "#f1c40f",
+            "HIGH": "#e67e22",
+            "CRITICAL": "#e74c3c",
+        },
         "cell_count": len(cells),
         "cells": cells,
     }

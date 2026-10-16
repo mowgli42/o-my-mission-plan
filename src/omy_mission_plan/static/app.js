@@ -19,13 +19,33 @@ const state = {
   selectedRouteId: null,
   selectedEventId: null,
   selectedThreatId: null,
+  hoveredThreatId: null,
   view: "plan",
   routesPane: "table",
   showCostgrid: false,
+  showRings: false,
   showThreats: true,
   showRoutes: true,
   showAircraftOnRoute: true,
   groupByType: true,
+  cellNmi: 45,
+  cellStyle: "hex",
+  altitudeFt: 10000,
+  legendFilter: null,
+  routeExposureMode: true,
+};
+
+const COST_RAMP = {
+  LOW: "#2ecc71",
+  MEDIUM: "#f1c40f",
+  HIGH: "#e67e22",
+  CRITICAL: "#e74c3c",
+};
+
+const EXPOSURE_STROKE = {
+  CLEAR: "#3dd6c6",
+  JAM: "#f0c14a",
+  LETHAL: "#ff5c6c",
 };
 
 const BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
@@ -262,15 +282,26 @@ function renderStats() {
   $("#stat-idle").textContent = s ? s.idle : "—";
 }
 
-function costLevelColor(level, intensity) {
-  const alpha = Math.min(0.55, 0.12 + intensity * 0.1);
-  const map = {
-    LOW: `rgba(93, 222, 160, ${alpha})`,
-    MEDIUM: `rgba(240, 193, 74, ${alpha})`,
-    HIGH: `rgba(255, 122, 69, ${alpha})`,
-    CRITICAL: `rgba(255, 92, 108, ${alpha})`,
-  };
-  return map[level] || `rgba(148, 163, 184, ${alpha})`;
+function costLevelColor(level, intensity = 1) {
+  // Solid fills only — fixed opacity, no alpha stacking across cells.
+  const base = COST_RAMP[level] || "#94a3b8";
+  const dim = state.legendFilter && state.legendFilter !== level;
+  const opacity = dim ? 0.12 : 0.72;
+  // intensity reserved for future shade tuning; ramp is by level.
+  void intensity;
+  const r = parseInt(base.slice(1, 3), 16);
+  const g = parseInt(base.slice(3, 5), 16);
+  const b = parseInt(base.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+function syncCostLegend() {
+  const host = $("#cost-legend");
+  if (!host) return;
+  host.hidden = !state.showCostgrid;
+  host.querySelectorAll(".cost-band").forEach((btn) => {
+    btn.classList.toggle("active", state.legendFilter === btn.dataset.level);
+  });
 }
 
 function nmToSvgRadius(lat, lon, radiusNmi) {
@@ -282,10 +313,12 @@ function nmToSvgRadius(lat, lon, radiusNmi) {
 function refreshMap() {
   renderMap("#map", {
     showThreats: state.showThreats,
+    showRings: state.showRings,
     showRoutes: state.showRoutes,
     showCostgrid: state.showCostgrid,
     showAircraft: state.showAircraftOnRoute,
   });
+  syncCostLegend();
   renderExposurePanel();
 }
 
@@ -310,6 +343,13 @@ function renderExposurePanel() {
     : `<div class="exposure-head">No jam/lethal exposure on current routes</div>`;
 }
 
+function legExposureBand(leg) {
+  if (!leg?.exposed) return "CLEAR";
+  if ((leg.threats || []).some((t) => t.band === "LETHAL")) return "LETHAL";
+  if ((leg.threats || []).some((t) => t.band === "JAM")) return "JAM";
+  return "CLEAR";
+}
+
 function renderMap(svgSel = "#map", opts = {}) {
   const svg = $(svgSel);
   const w = state.world;
@@ -317,24 +357,36 @@ function renderMap(svgSel = "#map", opts = {}) {
     if (svg) svg.innerHTML = "";
     return;
   }
-  const showThreats = opts.showThreats !== false && state.showThreats !== false;
+  const showThreatPoints = opts.showThreats !== false && state.showThreats !== false;
+  const showRings = opts.showRings ?? state.showRings;
+  const ringsOnlyHover = opts.ringsOnlyHover === true;
   const showRoutes = opts.showRoutes !== false && (opts.route || state.showRoutes !== false);
   const showCostgrid = opts.showCostgrid ?? state.showCostgrid;
   const showAircraft = opts.showAircraft ?? state.showAircraftOnRoute;
+  const costOpacity = opts.costOpacity;
+  const exposureMode = opts.exposureMode === true || (opts.route && state.routeExposureMode);
   const parts = [];
+  // z-order: land silhouette → cost field → rings → navaids/fixes → routes → markers → labels
   parts.push(`
     <path d="M80,460 C140,430 180,380 220,300 C260,220 300,160 360,120 C420,80 480,70 540,90 C560,140 550,220 520,280 C490,340 450,400 400,440 C340,480 200,500 80,460 Z"
       fill="rgba(61,214,198,0.04)" stroke="rgba(61,214,198,0.18)" stroke-width="1.5"/>`);
 
   if (showCostgrid && state.costgrid?.cells?.length) {
+    const groupOpacity = costOpacity != null ? ` opacity="${costOpacity}"` : "";
+    parts.push(`<g class="cost-field"${groupOpacity}>`);
     for (const cell of state.costgrid.cells) {
+      if (state.legendFilter && cell.level !== state.legendFilter) {
+        // Still draw dimmed via costLevelColor unless hard-filter requested
+      }
       const pts = (cell.vertices || [])
         .map(([la, lo]) => project(la, lo).join(","))
         .join(" ");
+      // Solid fill, no stroke — avoids muddy overlap / fighting outlines.
       parts.push(
-        `<polygon points="${pts}" fill="${costLevelColor(cell.level, cell.intensity)}" stroke="rgba(0,0,0,0.15)" stroke-width="0.5"/>`,
+        `<polygon class="cost-cell" data-level="${cell.level}" points="${pts}" fill="${costLevelColor(cell.level, cell.intensity)}" stroke="none"/>`,
       );
     }
+    parts.push(`</g>`);
   }
 
   // Limit navaid labels when dense
@@ -351,23 +403,33 @@ function renderMap(svgSel = "#map", opts = {}) {
     const [x, y] = project(m.location.lat, m.location.lon);
     parts.push(`<g><polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/><text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text></g>`);
   }
-  if (showThreats) {
-    for (const th of w.threats || []) {
-      const loc = th.location || th;
-      const lat = loc.lat ?? th.latitude;
-      const lon = loc.lon ?? th.longitude;
-      const [x, y] = project(lat, lon);
-      const jamR = nmToSvgRadius(lat, lon, th.jam_radius_nmi || 160);
-      const lethR = nmToSvgRadius(lat, lon, th.lethal_radius_nmi || 50);
-      const sel = state.selectedThreatId === th.id ? 1 : 0.55;
-      parts.push(`<g class="threat-g" data-threat="${th.id}" style="cursor:pointer">
-        <circle cx="${x}" cy="${y}" r="${jamR}" fill="rgba(239,68,68,0.06)" stroke="rgba(239,68,68,${0.35 * sel})" stroke-dasharray="4 3" stroke-width="1"/>
-        <circle cx="${x}" cy="${y}" r="${lethR}" fill="rgba(239,68,68,0.12)" stroke="#ef4444" stroke-width="1.2" opacity="${sel}"/>
-        <circle cx="${x}" cy="${y}" r="5" fill="#ef4444"/>
-        <text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}</text>
-      </g>`);
+
+  const activeThreatId = state.hoveredThreatId || state.selectedThreatId;
+  for (const th of w.threats || []) {
+    const loc = th.location || th;
+    const lat = loc.lat ?? th.latitude;
+    const lon = loc.lon ?? th.longitude;
+    const [x, y] = project(lat, lon);
+    const jamR = nmToSvgRadius(lat, lon, th.jam_radius_nmi || 160);
+    const lethR = nmToSvgRadius(lat, lon, th.lethal_radius_nmi || 50);
+    const isActive = activeThreatId === th.id;
+    const drawRings =
+      showRings && (!ringsOnlyHover || isActive);
+    parts.push(`<g class="threat-g" data-threat="${th.id}" style="cursor:pointer">`);
+    if (drawRings) {
+      // Thin rings only — no fill wash that muddies the solid field.
+      parts.push(`
+        <circle cx="${x}" cy="${y}" r="${jamR}" fill="none" stroke="rgba(239,68,68,0.55)" stroke-dasharray="4 3" stroke-width="1.1"/>
+        <circle cx="${x}" cy="${y}" r="${lethR}" fill="none" stroke="#ef4444" stroke-width="1.4"/>`);
     }
+    if (showThreatPoints) {
+      parts.push(`
+        <circle cx="${x}" cy="${y}" r="${isActive ? 6 : 5}" fill="#ef4444"/>
+        <text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}</text>`);
+    }
+    parts.push(`</g>`);
   }
+
   for (const b of w.airbases || []) {
     const [x, y] = project(b.location.lat, b.location.lon);
     const launch = b.id === (w.launch_base_id || "OEPS");
@@ -399,18 +461,20 @@ function renderMap(svgSel = "#map", opts = {}) {
         p.route_name;
       const nogo = (p.status || "") === "NO-GO";
       const opacity = selected ? 0.95 : 0.28;
-      const width = selected ? 2.5 : 1.5;
-      const exp = exposureByAc[p.aircraft_id];
-      if (exp?.legs?.length) {
+      const width = selected ? (exposureMode ? 3.2 : 2.5) : 1.5;
+      const exp = exposureByAc[p.aircraft_id] || opts.exposurePlatform;
+      if (exp?.legs?.length && (exposureMode || selected)) {
         for (const leg of exp.legs) {
           const a = wps[leg.leg_index];
           const b = wps[leg.leg_index + 1];
           if (!a || !b) continue;
           const [x1, y1] = project(a.lat ?? a.location?.lat, a.lon ?? a.location?.lon);
           const [x2, y2] = project(b.lat ?? b.location?.lat, b.lon ?? b.location?.lon);
-          const lethal = (leg.threats || []).some((t) => t.band === "LETHAL");
-          const stroke = leg.exposed ? (lethal ? "#ff5c6c" : "#f0c14a") : nogo ? "#ff5c6c" : "#3dd6c6";
-          parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${width}" opacity="${opacity}"/>`);
+          const band = legExposureBand(leg);
+          const stroke = nogo && band === "CLEAR" ? "#ff5c6c" : EXPOSURE_STROKE[band];
+          parts.push(
+            `<line class="route-leg" data-band="${band}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${width}" opacity="${opacity}" stroke-linecap="round"/>`,
+          );
         }
       } else {
         const pts = wps
@@ -443,14 +507,30 @@ function renderMap(svgSel = "#map", opts = {}) {
   svg.innerHTML = parts.join("");
   svg.querySelectorAll("[data-threat]").forEach((el) => {
     el.addEventListener("click", () => {
-      state.selectedThreatId = el.dataset.threat;
+      state.selectedThreatId =
+        state.selectedThreatId === el.dataset.threat ? null : el.dataset.threat;
       const th = (state.world?.threats || []).find((t) => t.id === state.selectedThreatId);
       if (th) {
         toast(
           `${th.id} · ${th.kind} · ${th.severity} · lethal ${th.lethal_radius_nmi}nm / jam ${th.jam_radius_nmi}nm`,
         );
       }
-      refreshMap();
+      if (opts.onThreatChange) opts.onThreatChange();
+      else refreshMap();
+    });
+    el.addEventListener("mouseenter", () => {
+      state.hoveredThreatId = el.dataset.threat;
+      if (ringsOnlyHover) {
+        if (opts.onThreatChange) opts.onThreatChange();
+        else refreshMap();
+      }
+    });
+    el.addEventListener("mouseleave", () => {
+      state.hoveredThreatId = null;
+      if (ringsOnlyHover) {
+        if (opts.onThreatChange) opts.onThreatChange();
+        else refreshMap();
+      }
     });
   });
 }
@@ -608,6 +688,64 @@ function renderMilestones(route) {
 
 /* ---------- Details drawer ---------- */
 
+function detailExposurePlatform(route) {
+  const acId = route.aircraft_id;
+  const fromApi = (state.exposure?.platforms || []).find((p) => p.aircraft_id === acId);
+  if (fromApi) return fromApi;
+  // Fallback: synthesize clear legs from waypoints so exposure coloring still works.
+  const wps = route.waypoints || [];
+  const legs = [];
+  for (let i = 0; i < wps.length - 1; i++) {
+    legs.push({ leg_index: i, exposed: false, threats: [] });
+  }
+  // Prefer overview threat segments when present.
+  const threats = route.threats || [];
+  for (const t of threats) {
+    for (const seg of t.segments || []) {
+      const idx = typeof seg === "number" ? seg : seg.leg_index ?? seg.index;
+      if (idx == null || !legs[idx]) continue;
+      legs[idx].exposed = true;
+      legs[idx].threats.push({
+        threat_id: t.threat_id,
+        band: t.band,
+        severity: t.severity,
+      });
+    }
+  }
+  return { aircraft_id: acId, legs, threats_that_see: threats };
+}
+
+function renderDetailMaps(route) {
+  const segs = route.primary_threat?.segments || [];
+  const expPlat = detailExposurePlatform(route);
+  const redraw = () => renderDetailMaps(route);
+  renderMap("#detail-map", {
+    route,
+    forceSelected: true,
+    segments: segs,
+    showThreats: true,
+    showRings: true,
+    ringsOnlyHover: true,
+    showCostgrid: false,
+    showAircraft: false,
+    exposureMode: true,
+    exposurePlatform: expPlat,
+    onThreatChange: redraw,
+  });
+  // Inset: simplified solid field overview (reduced opacity).
+  renderMap("#detail-inset", {
+    route,
+    forceSelected: true,
+    showThreats: false,
+    showRings: false,
+    showCostgrid: true,
+    showAircraft: false,
+    showRoutes: true,
+    costOpacity: 0.55,
+    exposureMode: false,
+  });
+}
+
 function openDetails() {
   const r = selectedRoute();
   if (!r) return;
@@ -616,24 +754,27 @@ function openDetails() {
   $("#drawer-title").textContent = `${r.route_name} · ${r.callsign}`;
   const prim = r.primary_threat;
   $("#drawer-sub").textContent = prim
-    ? `Closest threat ${prim.threat_id} · ${prim.closest_approach_nm.toFixed(1)} nm · ${prim.band} · ${prim.severity}`
-    : "No threats within 160 nm jam radius";
+    ? `Route exposure · closest ${prim.threat_id} · ${prim.closest_approach_nm.toFixed(1)} nm · ${prim.band} · ${prim.severity}`
+    : "Route exposure · no threats within 160 nm jam radius";
 
-  const segs = prim?.segments || [];
-  renderMap("#detail-map", {
-    route: r,
-    forceSelected: true,
-    segments: segs,
-    showThreats: true,
+  const ensureField = state.costgrid
+    ? Promise.resolve()
+    : loadCostgrid(true);
+  ensureField.then(() => {
+    renderDetailMaps(r);
+    renderDetailThreats(r);
+    renderDetailTasks(r);
+    renderSegmentTimeline(r);
   });
-  // Also draw threats from overview
-  renderDetailThreats(r);
-  renderDetailTasks(r);
-  renderSegmentTimeline(r);
 }
 
 function closeDetails() {
   $("#details-drawer").hidden = true;
+}
+
+function severityBadge(sev) {
+  const s = String(sev || "MEDIUM").toUpperCase();
+  return `<span class="sev-badge sev-${s.toLowerCase()}">${s}</span>`;
 }
 
 function renderDetailThreats(route) {
@@ -648,17 +789,32 @@ function renderDetailThreats(route) {
     <tbody>
       ${rows
         .map(
-          (t) => `<tr class="${(t.severity || "").toLowerCase()}">
-        <td><strong>${t.threat_id}</strong><div class="item-meta">${t.threat_label}</div></td>
-        <td>${t.threat_kind}</td>
-        <td>${t.closest_approach_nm.toFixed(1)} nm</td>
+          (t) => `<tr class="threat-row ${(t.severity || "").toLowerCase()}" data-threat-row="${t.threat_id}" style="cursor:pointer">
+        <td><strong>${t.threat_id}</strong><div class="item-meta">${t.threat_label || ""}</div></td>
+        <td>${t.threat_kind || "—"}</td>
+        <td>${Number(t.closest_approach_nm || 0).toFixed(1)} nm</td>
         <td><span class="${bandClass(t.band)}">${t.band}</span></td>
-        <td>${t.impacted_segment_count}</td>
-        <td>${t.severity}</td>
+        <td>${t.impacted_segment_count ?? "—"}</td>
+        <td>${severityBadge(t.severity)}</td>
       </tr>`,
         )
         .join("")}
     </tbody></table>`;
+  host.querySelectorAll("[data-threat-row]").forEach((row) => {
+    row.addEventListener("click", () => {
+      state.selectedThreatId =
+        state.selectedThreatId === row.dataset.threatRow ? null : row.dataset.threatRow;
+      renderDetailMaps(route);
+    });
+    row.addEventListener("mouseenter", () => {
+      state.hoveredThreatId = row.dataset.threatRow;
+      renderDetailMaps(route);
+    });
+    row.addEventListener("mouseleave", () => {
+      state.hoveredThreatId = null;
+      renderDetailMaps(route);
+    });
+  });
 }
 
 function renderDetailTasks(route) {
@@ -772,9 +928,14 @@ function archetypeLabel(a) {
   return map[a] || a || "—";
 }
 
-async function loadCostgrid() {
-  if (!state.showCostgrid) return;
-  state.costgrid = await api("/api/map/costgrid?cell_nmi=45");
+async function loadCostgrid(force = false) {
+  if (!force && !state.showCostgrid) return;
+  const q = new URLSearchParams({
+    cell_nmi: String(state.cellNmi || 45),
+    cell_style: state.cellStyle || "hex",
+    altitude_ft: String(state.altitudeFt || 10000),
+  });
+  state.costgrid = await api(`/api/map/costgrid?${q}`);
 }
 
 async function loadExposure() {
@@ -1208,6 +1369,10 @@ function wire() {
     if (state.showCostgrid) await loadCostgrid();
     refreshMap();
   });
+  $("#tog-rings")?.addEventListener("change", (e) => {
+    state.showRings = e.target.checked;
+    refreshMap();
+  });
   $("#tog-threats")?.addEventListener("change", (e) => {
     state.showThreats = e.target.checked;
     refreshMap();
@@ -1220,6 +1385,29 @@ function wire() {
     state.showAircraftOnRoute = e.target.checked;
     await loadPositions();
     refreshMap();
+  });
+  $("#sel-cell-nmi")?.addEventListener("change", async (e) => {
+    state.cellNmi = Number(e.target.value) || 45;
+    if (state.showCostgrid || state.costgrid) await loadCostgrid(true);
+    refreshMap();
+  });
+  $("#sel-cell-style")?.addEventListener("change", async (e) => {
+    state.cellStyle = e.target.value || "hex";
+    if (state.showCostgrid || state.costgrid) await loadCostgrid(true);
+    refreshMap();
+  });
+  $("#sel-altitude")?.addEventListener("change", async (e) => {
+    state.altitudeFt = Number(e.target.value) || 10000;
+    if (state.showCostgrid || state.costgrid) await loadCostgrid(true);
+    toast(`Altitude ${state.altitudeFt} ft (display-only until stacked layers)`, "info");
+    refreshMap();
+  });
+  $$("#cost-legend .cost-band").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const level = btn.dataset.level;
+      state.legendFilter = state.legendFilter === level ? null : level;
+      refreshMap();
+    });
   });
   $("#tog-group-type")?.addEventListener("change", async (e) => {
     state.groupByType = e.target.checked;
