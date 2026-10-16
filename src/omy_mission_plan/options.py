@@ -330,6 +330,38 @@ class OptionStore:
 OPTION_STORE = OptionStore()
 
 
+def coa_payload(opt: MissionOption) -> dict[str, Any]:
+    """Summary metadata for the selected Course of Action (Mission Option)."""
+    return {
+        "option_id": opt.option_id,
+        "label": opt.label,
+        "slot": opt.slot,
+        "emphasis": opt.emphasis,
+        "archetype": opt.archetype,
+        "supplier_id": opt.router_inputs.get("supplier_id"),
+        "preferred": opt.preferred,
+    }
+
+
+def resolve_overview_plan(
+    session: PlanningSession,
+    *,
+    option_id: str | None = None,
+) -> tuple[PlanCycleResult, dict[str, Any] | None]:
+    """Pick plan + COA metadata for routes overview (explicit, preferred, or session)."""
+    if option_id:
+        opt = OPTION_STORE.get(option_id)
+        if opt is None:
+            raise KeyError(option_id)
+        return opt.result, coa_payload(opt)
+    preferred = OPTION_STORE.get_preferred()
+    if preferred is not None:
+        return preferred.result, coa_payload(preferred)
+    if session.latest is None:
+        raise RuntimeError("No plan yet — run a plan cycle first")
+    return session.latest, None
+
+
 def axis_vias(axis_name: str, profiles: Optional[dict[str, list[str]]] = None) -> list[str]:
     profiles = profiles or DEFAULT_AXIS_PROFILES
     if axis_name not in profiles:

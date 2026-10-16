@@ -208,6 +208,17 @@ def test_prefer_and_export_from_option():
     assert "routes" in body
 
 
+def test_routes_overview_includes_preferred_coa():
+    client.post("/api/plan")
+    top = client.post("/api/options/top-three").json()
+    oid = top["slots"]["A"]
+    client.post(f"/api/options/{oid}/prefer")
+    overview = client.get("/api/routes/overview").json()
+    assert overview["coa"]["option_id"] == oid
+    assert overview["coa"]["preferred"] is True
+    assert overview["metrics"]["aircraft_count"] >= 1
+
+
 def test_build_router_inputs_efficient_clears_vias():
     inputs = build_router_inputs("efficient", vias=["MW-MUTLA"])
     # efficient emphasis forces empty vias unless we only pass through build with vias=
