@@ -1,15 +1,43 @@
 import { chromium } from "playwright-core";
-import { mkdir } from "node:fs/promises";
+import { mkdir, access } from "node:fs/promises";
+import { constants } from "node:fs";
 
-const BASE = process.env.BASE_URL || "http://127.0.0.1:8000";
+const BASE = process.env.BASE_URL || "http://127.0.0.1:8010";
 const OUT = new URL("../docs/screenshots/", import.meta.url);
-const ART = "/opt/cursor/artifacts/screenshots";
+const ART = process.env.ARTIFACTS_DIR || "/tmp/omp-screenshots";
+
+const CANDIDATES = [
+  process.env.CHROME_PATH,
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/local/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/home/tprettol/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome",
+  "/home/tprettol/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome",
+].filter(Boolean);
+
+async function resolveChrome() {
+  for (const p of CANDIDATES) {
+    try {
+      await access(p, constants.X_OK);
+      return p;
+    } catch {
+      /* try next */
+    }
+  }
+  throw new Error(
+    `No Chrome/Chromium found. Set CHROME_PATH. Tried: ${CANDIDATES.join(", ")}`,
+  );
+}
 
 await mkdir(OUT, { recursive: true });
 await mkdir(ART, { recursive: true });
 
+const executablePath = await resolveChrome();
+console.log("chrome", executablePath, "base", BASE);
+
 const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "/usr/local/bin/google-chrome",
+  executablePath,
   headless: true,
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
@@ -22,16 +50,53 @@ async function shot(name) {
   console.log("wrote", name);
 }
 
+async function ensureChecked(sel, on = true) {
+  const el = page.locator(sel);
+  if (!(await el.count())) return;
+  // Toolbar toggles can sit in overflow; drive state directly then notify change.
+  await page.evaluate(
+    ({ selector, want }) => {
+      const input = document.querySelector(selector);
+      if (!input) return;
+      if (input.checked === want) return;
+      input.checked = want;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    { selector: sel, want: on },
+  );
+  await page.waitForTimeout(200);
+}
+
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForSelector(".brand-mark");
-await page.waitForTimeout(700);
-
-// Cost grid + threats on plan map
-await page.check("#tog-costgrid");
 await page.waitForTimeout(500);
+
+// Seed a plan so routes / exposure / details have content
+await page.click("#btn-plan");
+await page.waitForFunction(() => {
+  const go = document.querySelector("#stat-go")?.textContent?.trim();
+  return go && go !== "—";
+}, { timeout: 20000 });
+await page.waitForTimeout(600);
+
+// Stay on Plan tab for the solid-field shot
+await page.click('#tab-plan, .tab[data-view="plan"]');
+await page.waitForTimeout(300);
+
+// 01 — Plan: solid weather-radar cost field (rings off so the field reads clean)
+await ensureChecked("#tog-costgrid", true);
+await ensureChecked("#tog-rings", false);
+await ensureChecked("#tog-threats", true);
+await ensureChecked("#tog-routes", true);
+await page.waitForFunction(() => {
+  const legend = document.querySelector("#cost-legend");
+  const cells = document.querySelectorAll("#map .cost-cell, #map polygon.cost-cell");
+  return legend && !legend.hidden && cells.length > 0;
+}, { timeout: 20000 });
+await page.waitForTimeout(400);
 await shot("01-plan-psab-world");
 
-// CONOPS Options showcase
+// 02 — Options A/B/C
 await page.click("#tab-options");
 await page.waitForTimeout(400);
 await page.click("#btn-top-three");
@@ -44,24 +109,25 @@ if (await prefer.count()) {
 }
 await shot("02-options-top-three");
 
+// 03 — Routes overview
 await page.click("#tab-routes");
 await page.waitForTimeout(800);
 await page.waitForSelector("#routes-tbody tr[data-route]");
 await shot("03-routes-overview-metrics");
 
-// Aligned timeline
+// 04 — Aligned timeline
 await page.click('.subtab[data-routes-pane="timeline"]');
 await page.waitForTimeout(800);
 await shot("04-aligned-timeline");
 
+// 05 — Details drawer: route-exposure focus + inset theater field
 await page.click('.subtab[data-routes-pane="table"]');
 await page.waitForTimeout(300);
-const rows = page.locator("#routes-tbody tr[data-route]");
-await rows.first().click();
+await page.locator("#routes-tbody tr[data-route]").first().click();
 await page.waitForTimeout(400);
 await page.click("#btn-more-details");
-await page.waitForTimeout(800);
 await page.waitForSelector("#details-drawer:not([hidden])");
+await page.waitForTimeout(900);
 await shot("05-route-details-map-threats");
 
 await browser.close();

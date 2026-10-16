@@ -22,25 +22,41 @@ Functional prototype for iterative “guess-and-see” mission planning cycles i
 
 ## Screenshots
 
-### 1. Plan tab — cost grid + threats
+Captured from the live Plan / Options / Routes console after a plan cycle
+(`make demo` → http://localhost:8010). Regenerate with `make screenshots`.
 
-![Plan PSAB world](docs/screenshots/01-plan-psab-world.png)
+### 1. Plan tab — solid weather-radar cost field
 
-### 2. Options tab — force archetypes A/B/C
+Non-overlapping hex (or square) cells with a green → yellow → orange → red
+ramp. Cost field, vector rings, and threat points are independent toggles;
+legend documents **max** aggregation.
+
+![Plan PSAB world — solid threat weather field](docs/screenshots/01-plan-psab-world.png)
+
+### 2. Options tab — top-three Mission Options A/B/C
+
+Efficient / Synchronized / Unexpected-axis working set with compare and prefer.
 
 ![Options top-three](docs/screenshots/02-options-top-three.png)
 
-### 3. Routes overview — metrics + table
+### 3. Routes overview — metrics + battlespace table
+
+Fleet GO / NO-GO metrics and route list with closest-threat bands.
 
 ![Routes overview](docs/screenshots/03-routes-overview-metrics.png)
 
 ### 4. Aligned multi-platform timeline (TOT)
 
+Shared time axis across platforms for TOT / sync analysis.
+
 ![Aligned timeline](docs/screenshots/04-aligned-timeline.png)
 
-### 5. More details — map, threats, task breakout
+### 5. More details — route-exposure focus
 
-![Route details](docs/screenshots/05-route-details-map-threats.png)
+Selected route segments by clear / jam / lethal; rings on select or hover;
+inset theater field; threats-on-route with severity badges.
+
+![Route details — exposure + inset field](docs/screenshots/05-route-details-map-threats.png)
 
 ---
 
@@ -108,8 +124,11 @@ intentionally external:
 
 - Force-approach archetypes, contingency pool, gap-assessment hooks ([#13](https://github.com/mowgli42/o-my-mission-plan/issues/13))
 - Richer nav density via X-Plane theater extract ([#14](https://github.com/mowgli42/o-my-mission-plan/issues/14))
-- UI polish: cost-grid threats, map position, TOT timeline, platform reorder ([#15](https://github.com/mowgli42/o-my-mission-plan/issues/15)–[#18](https://github.com/mowgli42/o-my-mission-plan/issues/18))
+- Platform list group/reorder polish ([#18](https://github.com/mowgli42/o-my-mission-plan/issues/18))
 - Full ATO parsing, advanced allocation, loadouts, multi-ship deconfliction — external suppliers via UCI (not in this repo)
+
+Shipped recently: solid threat-weather cost field + route-exposure details
+([#15](https://github.com/mowgli42/o-my-mission-plan/issues/15), [#33](https://github.com/mowgli42/o-my-mission-plan/issues/33) / PR [#37](https://github.com/mowgli42/o-my-mission-plan/pull/37)).
 
 ---
 
@@ -162,6 +181,7 @@ The live demo auto-loads the bundled **fuzzy-reconciler Gulf War EOB**
 | Dark-theme IxDF planning UI | Done |
 | Routes overview (battlespace table + debrief timeline) | Done |
 | Route details drawer (map + threats + tasks) | Done |
+| Solid weather-radar cost field + route-exposure UI | Done (hex/square field, rings toggle, inset overview) |
 | Pluggable route suppliers (`ROUTE_SUPPLIER`) | Done (fallback + ORF graph spike + cost-grid avoids) |
 | CONOPS Mission Options A/B/C + compare / re-run | Done |
 | Options UI (top-three showcase) | Done |
@@ -250,8 +270,9 @@ Set `NAV_SOURCE=fixture|xplane` for theater navaid density (default `fixture`; e
 
 Dark ops console aligned with **o-my-debrief** (timeline / key events) and
 **battlespace-manager** (route table, threat bands, map + segment timeline).
-**Options** tab showcases the CONOPS top-three working set; Plan for guess-and-see;
-Routes for fleet overview; More details for map / threats / task breakout.
+**Options** tab showcases the CONOPS top-three working set; Plan for guess-and-see
+with a solid threat-weather cost field; Routes for fleet overview; More details
+for route-exposure coloring, inset theater field, and task breakout.
 
 ---
 
