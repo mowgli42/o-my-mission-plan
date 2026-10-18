@@ -11,16 +11,19 @@ Related: #15, `docs/THREAT-COST-GRID-OPTIONS.md`.
 Add two complementary display modes:
 
 1. **Option 1 — Solid weather-radar cost field**
-   - Non-overlapping solid cells (hex or square) with a clear green → yellow → orange → red intensity ramp.
+   - Continuous, denser regional field of solid opaque, edge-to-edge, non-overlapping cells (hex or square) with a clear green → yellow → orange → red intensity ramp.
    - No alpha stacking, no cell strokes that fight the fill.
+   - Existing nominal cell-size and hex-versus-square controls are preserved; rendering samples at half pitch so neighbouring cells connect into zones.
    - Threat centers as points; vector rings as a separate toggle.
    - Routes and tasks remain crisp on top.
 
 2. **Option 4 — Route-exposure focus** (details drawer / selected route)
-   - Color only the selected route segments by exposure band (clear / jam / lethal).
-   - Threat rings appear only on selection or hover.
-   - Small inset theater overview with simple color field.
-   - Side panel lists threats on the route with severity badges.
+   - Keep the base route crisp; mark only the exact route points and short sub-segments actually inside threat coverage as jammed or lethal (never a whole-leg wash).
+   - Threat rings appear only on selection or hover, and only for that threat.
+   - Small inset theater overview with the same solid color field.
+   - Side panel lists threats affecting the route with exposure, severity, and RF frequency band.
+
+Terminology correction: **band** means only a threat/jammer RF frequency band. Route impact is described as exposure (clear / jammed / lethal), never as a task type (Strike/ISR) or platform type.
 
 ## Non-goals
 
@@ -30,7 +33,7 @@ Add two complementary display modes:
 
 ## Success criteria
 
-- With the cost grid on, the map shows a readable solid field instead of a muddy overlap.
-- Selecting a route in the details view shows exposure-colored segments without cluttering the overview.
-- Legend, z-order, and layer toggles make the encoding explicit.
+- With the cost grid on, the map shows a readable, continuous solid field instead of disconnected shapes or a muddy overlap.
+- Selecting a route in the details view shows the exact impacted points/sub-segments without cluttering the overview or washing whole legs.
+- Legend, z-order, layer toggles, and RF-frequency-band terminology make the encoding explicit.
 - OpenSpec + Gherkin + Beads track the work.

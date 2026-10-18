@@ -93,7 +93,7 @@ class FixedThreat:
     category: str
     analyzed_at: str = ""
     range_km: float = 0.0
-    band: str = ""
+    frequency_band: str = ""
     status: str = ""
     attributes: dict[str, Any] = field(default_factory=dict)
 
@@ -163,7 +163,7 @@ def threats_from_region(
                 category=cat,
                 analyzed_at=str(raw.get("analyzed_at") or ""),
                 range_km=float(attrs.get("range_km") or 0),
-                band=str(attrs.get("band") or ""),
+                frequency_band=str(attrs.get("band") or ""),
                 status=str(attrs.get("status") or ""),
                 attributes=attrs,
             )
@@ -184,6 +184,7 @@ def to_demo_threat(fixed: FixedThreat) -> Threat:
         label=fixed.name,
         lethal_radius_nmi=min(range_nmi, 80.0),
         jam_radius_nmi=min(range_nmi * 2.5, 180.0),
+        frequency_band=fixed.frequency_band,
     )
 
 

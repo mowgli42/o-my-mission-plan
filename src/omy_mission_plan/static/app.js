@@ -44,7 +44,7 @@ const COST_RAMP = {
 
 const EXPOSURE_STROKE = {
   CLEAR: "#3dd6c6",
-  JAM: "#f0c14a",
+  JAMMED: "#f0c14a",
   LETHAL: "#ff5c6c",
 };
 
@@ -256,8 +256,12 @@ function statusBadge(status) {
   return `<span class="badge badge-idle">IDLE</span>`;
 }
 
-function bandClass(band) {
-  return `band band-${String(band || "out").toLowerCase()}`;
+function exposureClass(exposure) {
+  return `exposure-pill exposure-${String(exposure || "clear").toLowerCase()}`;
+}
+
+function frequencyBandLabel(threat) {
+  return threat?.frequency_band ? `RF ${threat.frequency_band}` : "RF band —";
 }
 
 function markerGlyph(marker) {
@@ -439,23 +443,18 @@ function renderStats() {
 }
 
 function costLevelColor(level, intensity = 1) {
-  // Solid fills only — fixed opacity, no alpha stacking across cells.
-  const base = COST_RAMP[level] || "#94a3b8";
-  const dim = state.legendFilter && state.legendFilter !== level;
-  const opacity = dim ? 0.12 : 0.72;
-  // intensity reserved for future shade tuning; ramp is by level.
+  // Solid fills only: fully opaque, non-overlapping cells, so no alpha
+  // stacking. A legend filter dims non-selected levels to a solid slate.
   void intensity;
-  const r = parseInt(base.slice(1, 3), 16);
-  const g = parseInt(base.slice(3, 5), 16);
-  const b = parseInt(base.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  if (state.legendFilter && state.legendFilter !== level) return "#263449";
+  return COST_RAMP[level] || "#94a3b8";
 }
 
 function syncCostLegend() {
   const host = $("#cost-legend");
   if (!host) return;
   host.hidden = !state.showCostgrid;
-  host.querySelectorAll(".cost-band").forEach((btn) => {
+  host.querySelectorAll(".cost-level").forEach((btn) => {
     btn.classList.toggle("active", state.legendFilter === btn.dataset.level);
   });
 }
@@ -490,20 +489,17 @@ function renderExposurePanel() {
     .filter((p) => (p.threats_that_see || []).length)
     .map((p) => {
       const sees = (p.threats_that_see || [])
-        .map((t) => `${t.threat_id}(${t.band})`)
+        .map((t) => `${t.threat_id} (${String(t.exposure || "").toLowerCase()}, ${frequencyBandLabel(t)})`)
         .join(", ");
-      return `<div><strong>${p.label || p.aircraft_id}</strong> seen by ${sees}</div>`;
+      return `<div><strong>${p.label || p.aircraft_id}</strong> exposed to ${sees}</div>`;
     });
   host.innerHTML = rows.length
-    ? `<div class="exposure-head">Threats that see platforms (jam/lethal)</div>${rows.join("")}`
-    : `<div class="exposure-head">No jam/lethal exposure on current routes</div>`;
+    ? `<div class="exposure-head">Threat exposure on routes (jammed / lethal · RF frequency band per threat)</div>${rows.join("")}`
+    : `<div class="exposure-head">No jammed or lethal exposure on current routes</div>`;
 }
 
-function legExposureBand(leg) {
-  if (!leg?.exposed) return "CLEAR";
-  if ((leg.threats || []).some((t) => t.band === "LETHAL")) return "LETHAL";
-  if ((leg.threats || []).some((t) => t.band === "JAM")) return "JAM";
-  return "CLEAR";
+function legWorstExposure(leg) {
+  return leg?.worst_exposure || "CLEAR";
 }
 
 function renderMap(mapSel = "#map", opts = {}) {
@@ -522,27 +518,27 @@ function renderMap(mapSel = "#map", opts = {}) {
   const showRoutes = opts.showRoutes !== false && (opts.route || state.showRoutes !== false);
   const showCostgrid = opts.showCostgrid ?? state.showCostgrid;
   const showAircraft = opts.showAircraft ?? state.showAircraftOnRoute;
-  const costOpacity = opts.costOpacity;
-  const exposureMode = opts.exposureMode === true || (opts.route && state.routeExposureMode);
-  const parts = [];
-  // z-order (above the dark tile base): cost field → rings → navaids/fixes → routes → markers → labels
+  const exposureMode = opts.exposureMode === true;
+  // Strict z-order above the dark tile base:
+  // cost field → rings → routes → markers → labels.
+  const fieldParts = [];
+  const ringParts = [];
+  const routeParts = [];
+  const markerParts = [];
+  const labelParts = [];
 
   if (showCostgrid && state.costgrid?.cells?.length) {
-    const groupOpacity = costOpacity != null ? ` opacity="${costOpacity}"` : "";
-    parts.push(`<g class="cost-field"${groupOpacity}>`);
+    fieldParts.push(`<g class="cost-field">`);
     for (const cell of state.costgrid.cells) {
-      if (state.legendFilter && cell.level !== state.legendFilter) {
-        // Still draw dimmed via costLevelColor unless hard-filter requested
-      }
       const pts = (cell.vertices || [])
         .map(([la, lo]) => project(la, lo).join(","))
         .join(" ");
-      // Solid fill, no stroke — avoids muddy overlap / fighting outlines.
-      parts.push(
+      // Solid opaque fill, no stroke — neighbours abut without alpha stacking.
+      fieldParts.push(
         `<polygon class="cost-cell" data-level="${cell.level}" points="${pts}" fill="${costLevelColor(cell.level, cell.intensity)}" stroke="none"/>`,
       );
     }
-    parts.push(`</g>`);
+    fieldParts.push(`</g>`);
   }
 
   // Limit navaid labels when dense
@@ -550,14 +546,15 @@ function renderMap(mapSel = "#map", opts = {}) {
   const labelEvery = navaids.length > 20 ? 2 : 1;
   navaids.forEach((n, i) => {
     const [x, y] = project(n.location.lat, n.location.lon);
-    const label = i % labelEvery === 0
-      ? `<text x="${x + 5}" y="${y + 3}" fill="#5c6b7e" font-size="8" font-family="IBM Plex Mono, monospace">${n.id}</text>`
-      : "";
-    parts.push(`<g><circle cx="${x}" cy="${y}" r="2.5" fill="#5c6b7e"/>${label}</g>`);
+    markerParts.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="#5c6b7e"/>`);
+    if (i % labelEvery === 0) {
+      labelParts.push(`<text x="${x + 5}" y="${y + 3}" fill="#5c6b7e" font-size="8" font-family="IBM Plex Mono, monospace">${n.id}</text>`);
+    }
   });
   for (const m of w.mission_waypoints || []) {
     const [x, y] = project(m.location.lat, m.location.lon);
-    parts.push(`<g><polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/><text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text></g>`);
+    markerParts.push(`<polygon points="${x},${y - 5} ${x + 4},${y + 3} ${x - 4},${y + 3}" fill="#c9a227"/>`);
+    labelParts.push(`<text x="${x + 6}" y="${y + 3}" fill="#c9a227" font-size="8" font-family="IBM Plex Mono, monospace">${m.id.replace("MW-", "")}</text>`);
   }
 
   const activeThreatId = state.hoveredThreatId || state.selectedThreatId;
@@ -569,32 +566,30 @@ function renderMap(mapSel = "#map", opts = {}) {
     const jamR = nmToSvgRadius(project, lat, lon, th.jam_radius_nmi || 160);
     const lethR = nmToSvgRadius(project, lat, lon, th.lethal_radius_nmi || 50);
     const isActive = activeThreatId === th.id;
-    const drawRings =
-      showRings && (!ringsOnlyHover || isActive);
-    parts.push(`<g class="threat-g" data-threat="${th.id}">`);
+    const drawRings = showRings && (!ringsOnlyHover || isActive);
     if (drawRings) {
-      // Thin rings only — no fill wash that muddies the solid field.
-      parts.push(`
+      // Only the active threat's rings in exposure mode; thin, no fill wash.
+      ringParts.push(`<g class="threat-rings" data-threat="${th.id}">
         <circle cx="${x}" cy="${y}" r="${jamR}" fill="none" stroke="rgba(239,68,68,0.55)" stroke-dasharray="4 3" stroke-width="1.1"/>
-        <circle cx="${x}" cy="${y}" r="${lethR}" fill="none" stroke="#ef4444" stroke-width="1.4"/>`);
+        <circle cx="${x}" cy="${y}" r="${lethR}" fill="none" stroke="#ef4444" stroke-width="1.4"/></g>`);
     }
     if (showThreatPoints) {
-      parts.push(`
-        <circle cx="${x}" cy="${y}" r="${isActive ? 6 : 5}" fill="#ef4444"/>
-        <text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}</text>`);
+      markerParts.push(`<g class="threat-g" data-threat="${th.id}"><circle cx="${x}" cy="${y}" r="${isActive ? 6 : 5}" fill="#ef4444"/></g>`);
+      labelParts.push(`<text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}</text>`);
     }
-    parts.push(`</g>`);
   }
 
   for (const b of w.airbases || []) {
     const [x, y] = project(b.location.lat, b.location.lon);
     const launch = b.id === (w.launch_base_id || "OEPS");
-    parts.push(`<g><rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${launch ? "#3dd6c6" : "#2a9a8e"}" transform="rotate(45 ${x} ${y})"/><text x="${x + 8}" y="${y - 6}" fill="#e8eef8" font-size="10" font-family="IBM Plex Mono, monospace">${b.id}${launch ? " ★" : ""}</text></g>`);
+    markerParts.push(`<rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${launch ? "#3dd6c6" : "#2a9a8e"}" transform="rotate(45 ${x} ${y})"/>`);
+    labelParts.push(`<text x="${x + 8}" y="${y - 6}" fill="#e8eef8" font-size="10" font-family="IBM Plex Mono, monospace">${b.id}${launch ? " ★" : ""}</text>`);
   }
   for (const t of w.tasks || []) {
     const [x, y] = project(t.location.lat, t.location.lon);
     const color = t.type === "ISR" ? "#4da3ff" : "#ff7a45";
-    parts.push(`<g><circle cx="${x}" cy="${y}" r="5" fill="${color}" opacity="0.9"/><text x="${x + 7}" y="${y + 3}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${t.id}</text></g>`);
+    markerParts.push(`<circle cx="${x}" cy="${y}" r="5" fill="${color}"/>`);
+    labelParts.push(`<text x="${x + 7}" y="${y + 3}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${t.id}</text>`);
   }
 
   const routeSource = opts.route
@@ -617,31 +612,55 @@ function renderMap(mapSel = "#map", opts = {}) {
         p.route_name;
       const nogo = (p.status || "") === "NO-GO";
       const opacity = selected ? 0.95 : 0.28;
-      const width = selected ? (exposureMode ? 3.2 : 2.5) : 1.5;
+      const width = selected ? 2.5 : 1.5;
+      const pts = wps
+        .map((wp) => project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon).join(","))
+        .join(" ");
+      // Base route stays crisp and neutral; exposure is an overlay of the
+      // exact impacted sub-segments/points, never a whole-leg wash.
+      routeParts.push(`<polyline class="route-path" points="${pts}" opacity="${opacity}" stroke-width="${width}" stroke="${nogo ? "#ff5c6c" : "#3dd6c6"}" fill="none"/>`);
+
       const exp = exposureByAc[p.aircraft_id] || opts.exposurePlatform;
-      if (exp?.legs?.length && (exposureMode || selected)) {
+      if (exposureMode && exp?.legs?.length) {
+        const seenPoints = new Set();
         for (const leg of exp.legs) {
-          const a = wps[leg.leg_index];
-          const b = wps[leg.leg_index + 1];
-          if (!a || !b) continue;
-          const [x1, y1] = project(a.lat ?? a.location?.lat, a.lon ?? a.location?.lon);
-          const [x2, y2] = project(b.lat ?? b.location?.lat, b.lon ?? b.location?.lon);
-          const band = legExposureBand(leg);
-          const stroke = nogo && band === "CLEAR" ? "#ff5c6c" : EXPOSURE_STROKE[band];
-          parts.push(
-            `<line class="route-leg" data-band="${band}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${width}" opacity="${opacity}" stroke-linecap="round"/>`,
-          );
+          const spans = activeThreatId
+            ? (leg.threats || []).find((t) => t.threat_id === activeThreatId)?.spans || []
+            : leg.exposure_spans || [];
+          for (const span of spans) {
+            const [x1, y1] = project(span.from.lat, span.from.lon);
+            const [x2, y2] = project(span.to.lat, span.to.lon);
+            routeParts.push(
+              `<line class="route-exposure-span" data-exposure="${span.exposure}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${EXPOSURE_STROKE[span.exposure]}" stroke-width="4.5" opacity="${opacity}" stroke-linecap="round"/>`,
+            );
+            for (const point of [span.from, span.to]) {
+              const key = `${point.lat},${point.lon},${span.exposure}`;
+              if (seenPoints.has(key)) continue;
+              seenPoints.add(key);
+              const [px, py] = project(point.lat, point.lon);
+              markerParts.push(
+                `<circle class="exposure-point" data-exposure="${span.exposure}" cx="${px}" cy="${py}" r="3.5" fill="${EXPOSURE_STROKE[span.exposure]}" stroke="#0b1220" stroke-width="1.2"/>`,
+              );
+            }
+          }
+          if (!activeThreatId) {
+            for (const point of leg.impacted_points || []) {
+              if (point.fraction !== 0 && point.fraction !== 1) continue;
+              const key = `${point.lat},${point.lon},${point.exposure}`;
+              if (seenPoints.has(key)) continue;
+              seenPoints.add(key);
+              const [px, py] = project(point.lat, point.lon);
+              markerParts.push(
+                `<circle class="exposure-point" data-exposure="${point.exposure}" cx="${px}" cy="${py}" r="3.5" fill="${EXPOSURE_STROKE[point.exposure]}" stroke="#0b1220" stroke-width="1.2"/>`,
+              );
+            }
+          }
         }
-      } else {
-        const pts = wps
-          .map((wp) => project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon).join(","))
-          .join(" ");
-        parts.push(`<polyline class="route-path" points="${pts}" opacity="${opacity}" stroke-width="${width}" stroke="${nogo ? "#ff5c6c" : "#3dd6c6"}" fill="none"/>`);
       }
       if (selected) {
         for (const wp of wps) {
           const [x, y] = project(wp.lat ?? wp.location?.lat, wp.lon ?? wp.location?.lon);
-          parts.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="${nogo ? "#ff5c6c" : "#3dd6c6"}"/>`);
+          markerParts.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="${nogo ? "#ff5c6c" : "#3dd6c6"}"/>`);
         }
       }
     }
@@ -653,14 +672,12 @@ function renderMap(mapSel = "#map", opts = {}) {
       const [x, y] = project(pos.position.lat, pos.position.lon);
       const color =
         pos.aircraft_type === "ISR" ? "#4da3ff" : pos.aircraft_type === "BOMBER" ? "#9b7fd4" : "#c9a227";
-      parts.push(`<g>
-        <circle cx="${x}" cy="${y}" r="7" fill="${color}" stroke="#0b1220" stroke-width="2"/>
-        <text x="${x + 9}" y="${y - 6}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${pos.label || pos.aircraft_id}</text>
-      </g>`);
+      markerParts.push(`<circle cx="${x}" cy="${y}" r="7" fill="${color}" stroke="#0b1220" stroke-width="2"/>`);
+      labelParts.push(`<text x="${x + 9}" y="${y - 6}" fill="${color}" font-size="9" font-family="IBM Plex Mono, monospace">${pos.label || pos.aircraft_id}</text>`);
     }
   }
 
-  svg.innerHTML = parts.join("");
+  svg.innerHTML = [...fieldParts, ...ringParts, ...routeParts, ...markerParts, ...labelParts].join("");
   svg.querySelectorAll("[data-threat]").forEach((el) => {
     el.addEventListener("click", () => {
       state.selectedThreatId =
@@ -668,7 +685,7 @@ function renderMap(mapSel = "#map", opts = {}) {
       const th = (state.world?.threats || []).find((t) => t.id === state.selectedThreatId);
       if (th) {
         toast(
-          `${th.id} · ${th.kind} · ${th.severity} · lethal ${th.lethal_radius_nmi}nm / jam ${th.jam_radius_nmi}nm`,
+          `${th.id} · ${th.kind} · ${th.severity} · frequency band ${frequencyBandLabel(th)} · lethal ${th.lethal_radius_nmi}nm / jam ${th.jam_radius_nmi}nm`,
         );
       }
       if (opts.onThreatChange) opts.onThreatChange();
@@ -713,13 +730,13 @@ function renderRoutesTable() {
   const tbody = $("#routes-tbody");
   const routes = state.overview?.routes || [];
   if (!routes.length) {
-    tbody.innerHTML = `<tr class="empty"><td colspan="9">No routes — run a plan cycle</td></tr>`;
+    tbody.innerHTML = `<tr class="empty"><td colspan="10">No routes — run a plan cycle</td></tr>`;
     return;
   }
   tbody.innerHTML = routes
     .map((r) => {
       const prim = r.primary_threat;
-      const band = prim?.band || "OUT";
+      const exposure = prim?.exposure || "CLEAR";
       const closest = prim ? `${prim.closest_approach_nm.toFixed(1)} nm` : "—";
       const sel = state.selectedRouteId === r.aircraft_id ? "selected" : "";
       const sev = (prim?.severity || "").toLowerCase();
@@ -729,7 +746,8 @@ function renderRoutesTable() {
         <td>${r.task_breakout.isr} ISR · ${r.task_breakout.strike} STK</td>
         <td class="num">${r.total_distance_nmi.toFixed(0)} nm</td>
         <td class="num">${closest}</td>
-        <td><span class="${bandClass(band)}">${band}</span></td>
+        <td><span class="${exposureClass(exposure)}">${exposure}</span></td>
+        <td>${prim?.frequency_band || "—"}</td>
         <td class="num">${r.weapons_utilized}/${r.weapons_loadout}</td>
         <td>${statusBadge(r.status)}</td>
         <td><button type="button" class="btn btn-ghost btn-details" data-details="${r.aircraft_id}">Details</button></td>
@@ -847,38 +865,58 @@ function renderMilestones(route) {
 function detailExposurePlatform(route) {
   const acId = route.aircraft_id;
   const fromApi = (state.exposure?.platforms || []).find((p) => p.aircraft_id === acId);
-  if (fromApi) return fromApi;
-  // Fallback: synthesize clear legs from waypoints so exposure coloring still works.
+  if (fromApi?.legs?.some((leg) => leg.exposure_spans?.length || leg.threats?.length)) {
+    return fromApi;
+  }
+  // Fallback from the route-overview per-threat sub-segments.
   const wps = route.waypoints || [];
   const legs = [];
   for (let i = 0; i < wps.length - 1; i++) {
-    legs.push({ leg_index: i, exposed: false, threats: [] });
+    legs.push({
+      leg_index: i,
+      exposed: false,
+      worst_exposure: "CLEAR",
+      exposure_spans: [],
+      impacted_points: [],
+      threats: [],
+    });
   }
-  // Prefer overview threat segments when present.
-  const threats = route.threats || [];
-  for (const t of threats) {
-    for (const seg of t.segments || []) {
-      const idx = typeof seg === "number" ? seg : seg.leg_index ?? seg.index;
-      if (idx == null || !legs[idx]) continue;
-      legs[idx].exposed = true;
-      legs[idx].threats.push({
+  for (const t of route.threats || []) {
+    const spansByLeg = new Map();
+    for (const span of t.exposure_spans || []) {
+      if (!legs[span.leg_index]) continue;
+      legs[span.leg_index].exposure_spans.push(span);
+      legs[span.leg_index].exposed = true;
+      if (!spansByLeg.has(span.leg_index)) spansByLeg.set(span.leg_index, []);
+      spansByLeg.get(span.leg_index).push(span);
+    }
+    for (const point of t.impacted_points || []) {
+      if (legs[point.leg_index]) legs[point.leg_index].impacted_points.push(point);
+    }
+    for (const [legIndex, spans] of spansByLeg.entries()) {
+      legs[legIndex].threats.push({
         threat_id: t.threat_id,
-        band: t.band,
+        kind: t.threat_kind,
         severity: t.severity,
+        frequency_band: t.frequency_band,
+        exposure: t.exposure,
+        closest_nm: t.closest_approach_nm,
+        spans,
       });
     }
   }
-  return { aircraft_id: acId, legs, threats_that_see: threats };
+  return { aircraft_id: acId, legs, threats_that_see: route.threats || [] };
 }
 
 function renderDetailMaps(route) {
-  const segs = route.primary_threat?.segments || [];
   const expPlat = detailExposurePlatform(route);
-  const redraw = () => renderDetailMaps(route);
+  const redraw = () => {
+    renderDetailMaps(route);
+    renderSegmentTimeline(route);
+  };
   renderMap("#detail-map", {
     route,
     forceSelected: true,
-    segments: segs,
     showThreats: true,
     showRings: true,
     ringsOnlyHover: true,
@@ -888,7 +926,7 @@ function renderDetailMaps(route) {
     exposurePlatform: expPlat,
     onThreatChange: redraw,
   });
-  // Inset: simplified solid field overview (reduced opacity).
+  // Inset: same solid field, simplified only by scale (still opaque fills).
   renderMap("#detail-inset", {
     route,
     forceSelected: true,
@@ -897,7 +935,6 @@ function renderDetailMaps(route) {
     showCostgrid: true,
     showAircraft: false,
     showRoutes: true,
-    costOpacity: 0.55,
     exposureMode: false,
   });
 }
@@ -931,8 +968,8 @@ function openDetails() {
   $("#drawer-title").textContent = `${r.route_name} · ${r.callsign}`;
   const prim = r.primary_threat;
   $("#drawer-sub").textContent = prim
-    ? `Route exposure · closest ${prim.threat_id} · ${prim.closest_approach_nm.toFixed(1)} nm · ${prim.band} · ${prim.severity}`
-    : "Route exposure · no threats within 160 nm jam radius";
+    ? `Route exposure · closest ${prim.threat_id} · ${prim.closest_approach_nm.toFixed(1)} nm · ${String(prim.exposure || "").toLowerCase()} · frequency band ${prim.frequency_band || "—"} · ${prim.severity}`
+    : "Route exposure · clear of all threat jam radii";
 
   const ensureField = state.costgrid
     ? Promise.resolve()
@@ -959,19 +996,20 @@ function renderDetailThreats(route) {
   const host = $("#detail-threats");
   const rows = route.threats || [];
   if (!rows.length) {
-    host.innerHTML = `<table><tbody><tr class="empty"><td>No threats within jam radius</td></tr></tbody></table>`;
+    host.innerHTML = `<table><tbody><tr class="empty"><td>Clear of threat jam radii</td></tr></tbody></table>`;
     return;
   }
   host.innerHTML = `<table>
-    <thead><tr><th>Threat</th><th>Kind</th><th>Closest</th><th>Band</th><th>Segs</th><th>Severity</th></tr></thead>
+    <thead><tr><th>Threat</th><th>Kind</th><th>Closest</th><th>Exposure</th><th>Frequency band</th><th>Sub-segs</th><th>Severity</th></tr></thead>
     <tbody>
       ${rows
         .map(
-          (t) => `<tr class="threat-row ${(t.severity || "").toLowerCase()}" data-threat-row="${t.threat_id}" style="cursor:pointer">
+          (t) => `<tr class="threat-row ${(t.severity || "").toLowerCase()}" data-threat-row="${t.threat_id}" style="cursor:pointer" title="${t.threat_id}: exposure ${String(t.exposure || "").toLowerCase()} · frequency band ${t.frequency_band || "—"}">
         <td><strong>${t.threat_id}</strong><div class="item-meta">${t.threat_label || ""}</div></td>
         <td>${t.threat_kind || "—"}</td>
         <td>${Number(t.closest_approach_nm || 0).toFixed(1)} nm</td>
-        <td><span class="${bandClass(t.band)}">${t.band}</span></td>
+        <td><span class="${exposureClass(t.exposure)}">${t.exposure}</span></td>
+        <td>${t.frequency_band || "—"}</td>
         <td>${t.impacted_segment_count ?? "—"}</td>
         <td>${severityBadge(t.severity)}</td>
       </tr>`,
@@ -983,14 +1021,17 @@ function renderDetailThreats(route) {
       state.selectedThreatId =
         state.selectedThreatId === row.dataset.threatRow ? null : row.dataset.threatRow;
       renderDetailMaps(route);
+      renderSegmentTimeline(route);
     });
     row.addEventListener("mouseenter", () => {
       state.hoveredThreatId = row.dataset.threatRow;
       renderDetailMaps(route);
+      renderSegmentTimeline(route);
     });
     row.addEventListener("mouseleave", () => {
       state.hoveredThreatId = null;
       renderDetailMaps(route);
+      renderSegmentTimeline(route);
     });
   });
 }
@@ -1014,7 +1055,9 @@ function renderDetailTasks(route) {
 
 function renderSegmentTimeline(route) {
   const host = $("#detail-segment-timeline");
-  const prim = route.primary_threat;
+  const activeId = state.hoveredThreatId || state.selectedThreatId;
+  const prim =
+    (route.threats || []).find((t) => t.threat_id === activeId) || route.primary_threat;
   const segs = prim?.segments || [];
   const total = route.total_distance_nmi || 0;
   const tasks = route.tasks || [];
@@ -1036,7 +1079,7 @@ function renderSegmentTimeline(route) {
 
   host.innerHTML = `
     <h3>Route timeline · ${route.route_name}</h3>
-    <p class="hint">${prim ? `${prim.threat_id} closest ${prim.closest_approach_nm.toFixed(1)} nm · ${prim.severity}` : "No primary threat"} · distance axis</p>
+    <p class="hint">${prim ? `${prim.threat_id} closest ${prim.closest_approach_nm.toFixed(1)} nm · exposure ${String(prim.exposure || "").toLowerCase()} · frequency band ${prim.frequency_band || "—"} · ${prim.severity}` : "Clear of threat coverage"} · distance axis · only impacted sub-segments are jammed/lethal</p>
     <div class="seg-tracks">
       <div class="seg-label">Impact</div>
       <div class="seg-line">
@@ -1045,7 +1088,7 @@ function renderSegmentTimeline(route) {
             ? segs
                 .map(
                   (s) =>
-                    `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="Seg ${s.index + 1} · ${s.closest_nm} nm · ${s.band}"></span>`,
+                    `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="Sub-segment ${s.index + 1} · ${s.closest_nm} nm · exposure ${String(s.exposure || "").toLowerCase()}"></span>`,
                 )
                 .join("")
             : `<span class="seg" style="flex:1;background:#64748b"></span>`
@@ -1582,7 +1625,7 @@ function wire() {
     toast(`Altitude ${state.altitudeFt} ft (display-only until stacked layers)`, "info");
     refreshMap();
   });
-  $$("#cost-legend .cost-band").forEach((btn) => {
+  $$("#cost-legend .cost-level").forEach((btn) => {
     btn.addEventListener("click", () => {
       const level = btn.dataset.level;
       state.legendFilter = state.legendFilter === level ? null : level;

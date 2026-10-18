@@ -113,12 +113,46 @@ def test_costgrid_and_exposure_and_timeline_apis():
     assert len(sq["cells"][0]["vertices"]) == 4
     assert len(cg["cells"][0]["vertices"]) == 6
 
+    assert cg["tiling"] == "edge-to-edge"
+    assert cg["render_cell_nmi"] == cg["cell_nmi"] / 2
+
     bad = client.get("/api/map/costgrid?cell_style=triangle")
     assert bad.status_code == 400
 
     exp = client.get("/api/map/exposure").json()
     assert exp["sees_mode"] == "jam_or_lethal"
     assert len(exp["platforms"]) >= 1
+    exposed_legs = [
+        leg
+        for platform in exp["platforms"]
+        for leg in platform["legs"]
+        if leg["exposure_spans"]
+    ]
+    assert exposed_legs
+    for leg in exposed_legs:
+        assert leg["worst_exposure"] in {"JAMMED", "LETHAL"}
+        for span in leg["exposure_spans"]:
+            assert span["from_fraction"] < span["to_fraction"]
+            assert span["exposure"] in {"JAMMED", "LETHAL"}
+        assert leg["impacted_points"]
+    seeing = [
+        threat
+        for platform in exp["platforms"]
+        for threat in platform["threats_that_see"]
+    ]
+    assert seeing
+    assert all(t["exposure"] in {"JAMMED", "LETHAL"} for t in seeing)
+    assert all("frequency_band" in t for t in seeing)
+    assert all("band" not in t for t in seeing)
+
+    overview = client.get("/api/routes/overview").json()
+    threat_rows = [t for r in overview["routes"] for t in r["threats"]]
+    assert threat_rows
+    assert all(t["exposure"] in {"JAMMED", "LETHAL"} for t in threat_rows)
+    assert all("frequency_band" in t for t in threat_rows)
+    assert all("band" not in t for t in threat_rows)
+    assert any(t["exposure_spans"] for t in threat_rows)
+    assert any(t["impacted_points"] for t in threat_rows)
 
     tl = client.get("/api/timeline").json()
     assert "tracks" in tl
@@ -157,4 +191,7 @@ def test_ui_has_new_controls():
     assert 'stroke="none"' in js
     assert "COST_RAMP" in js
     assert "ringsOnlyHover" in js
+    assert "route-exposure-span" in js
+    assert "exposure-point" in js
+    assert "frequency band" in js
     assert "aggregation = <strong>max</strong>" in html
