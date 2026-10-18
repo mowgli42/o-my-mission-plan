@@ -50,6 +50,13 @@ async function shot(name) {
   console.log("wrote", name);
 }
 
+async function shotViewport(name) {
+  const path = new URL(`${name}.png`, OUT).pathname;
+  await page.screenshot({ path });
+  await page.screenshot({ path: `${ART}/${name}.png` });
+  console.log("wrote", name, "(viewport)");
+}
+
 async function ensureChecked(sel, on = true) {
   const el = page.locator(sel);
   if (!(await el.count())) return;
@@ -79,8 +86,18 @@ await page.waitForFunction(() => {
 }, { timeout: 20000 });
 await page.waitForTimeout(600);
 
+// runPlan() finishes by switching to Routes; wait for that to land first,
+// otherwise its late setView("routes") overrides the Plan click below.
+await page
+  .waitForFunction(
+    () => document.querySelector(".tab.active")?.dataset.view === "routes",
+    { timeout: 20000 },
+  )
+  .catch(() => {});
+await page.waitForTimeout(400);
+
 // Stay on Plan tab for the solid-field shot
-await page.click('#tab-plan, .tab[data-view="plan"]');
+await page.click('.tab[data-view="plan"]');
 await page.waitForTimeout(300);
 
 // 01 — Plan: solid weather-radar cost field (rings off so the field reads clean)
@@ -94,7 +111,7 @@ await page.waitForFunction(() => {
   return legend && !legend.hidden && cells.length > 0;
 }, { timeout: 20000 });
 await page.waitForTimeout(400);
-await shot("01-plan-psab-world");
+await shotViewport("01-plan-psab-world");
 
 // 02 — Options A/B/C
 await page.click("#tab-options");
@@ -128,7 +145,7 @@ await page.waitForTimeout(400);
 await page.click("#btn-more-details");
 await page.waitForSelector("#details-drawer:not([hidden])");
 await page.waitForTimeout(900);
-await shot("05-route-details-map-threats");
+await shotViewport("05-route-details-map-threats");
 
 await browser.close();
 console.log("done");

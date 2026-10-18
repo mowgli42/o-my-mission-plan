@@ -259,7 +259,7 @@ def build_gap_report(
                 GapItem(
                     code="sync.tot_spread",
                     severity="MEDIUM",
-                    narrative=f"Strike TOT spread {sync.get('tot_spread_minutes')} min exceeds alignment band",
+                    narrative=f"Strike TOT spread {sync.get('tot_spread_minutes')} min exceeds alignment window",
                 )
             )
         deps.append(

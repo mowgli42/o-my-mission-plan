@@ -1,7 +1,11 @@
 """Routes overview enrichment for battlespace / debrief-aligned UI.
 
-Builds top-line metrics, per-route threat impact (battlespace bands), and
-end-to-end timeline / key events (o-my-debrief style) from a plan cycle.
+Builds top-line metrics, per-route threat impact (clear / jammed / lethal
+exposure at point and sub-segment level), and end-to-end timeline / key
+events (o-my-debrief style) from a plan cycle.
+
+Terminology: ``frequency_band`` is a threat/jammer RF band (e.g. S-band).
+It never means task type, platform type, or exposure state.
 """
 
 from __future__ import annotations
@@ -12,49 +16,55 @@ from .geo import haversine_nmi
 from .models import Aircraft, LatLon, Route, Task, TaskType, Threat, Waypoint
 from .planning import PlanCycleResult, PlannedAircraft
 
-# Battlespace-manager band thresholds (nm)
-BAND_STRIKE_NM = 50.0
-BAND_EJ_NM = 100.0
-BAND_JAM_NM = 160.0
-
 # Assumed cruise for timeline ETA stubs (prototype)
 CRUISE_KT = 420.0
 
-
-def band_for_distance(nm: float) -> str:
-    if nm <= BAND_STRIKE_NM:
-        return "STRIKE"
-    if nm <= BAND_EJ_NM:
-        return "EJ"
-    if nm <= BAND_JAM_NM:
-        return "JAM"
-    return "OUT"
+_EXPOSURE_RANK = {"CLEAR": 0, "JAMMED": 1, "LETHAL": 2}
 
 
-def band_color(band: str) -> str:
+def exposure_for_distance(
+    nm: float,
+    *,
+    lethal_radius_nmi: float,
+    jam_radius_nmi: float,
+) -> str:
+    """Exposure state at a route point: clear, jammed, or lethal."""
+    if nm <= lethal_radius_nmi:
+        return "LETHAL"
+    if nm <= jam_radius_nmi:
+        return "JAMMED"
+    return "CLEAR"
+
+
+def exposure_color(exposure: str) -> str:
     return {
-        "STRIKE": "#ef4444",
-        "EJ": "#f97316",
-        "JAM": "#a78bfa",
-        "OUT": "#64748b",
-    }.get(band, "#64748b")
+        "LETHAL": "#ff5c6c",
+        "JAMMED": "#f0c14a",
+        "CLEAR": "#3dd6c6",
+    }.get(exposure, "#64748b")
 
 
-def _segment_closest_nm(a: LatLon, b: LatLon, threat: LatLon, samples: int = 8) -> float:
-    best = float("inf")
-    for i in range(samples + 1):
-        t = i / samples
-        lat = a.lat + (b.lat - a.lat) * t
-        lon = a.lon + (b.lon - a.lon) * t
-        best = min(best, haversine_nmi(LatLon(lat=lat, lon=lon), threat))
-    return best
+def _point_at(a: LatLon, b: LatLon, fraction: float) -> LatLon:
+    return LatLon(
+        lat=a.lat + (b.lat - a.lat) * fraction,
+        lon=a.lon + (b.lon - a.lon) * fraction,
+    )
 
 
 def build_impact_segments(
     waypoints: list[Waypoint],
     threat: Threat,
 ) -> dict[str, Any]:
-    segments = []
+    """Sub-segment exposure of a route to one threat.
+
+    Each leg is split into short sub-segments (about 2 nmi). A sub-segment is
+    marked only when its own sampled points fall inside the threat's lethal
+    or jam radius, so operators see where exposure occurs instead of a
+    whole-leg wash.
+    """
+    lethal = float(threat.lethal_radius_nmi or 50.0)
+    jam = float(threat.jam_radius_nmi or 160.0)
+    segments: list[dict[str, Any]] = []
     cumulative = [0.0]
     closest_index = 0
     closest_nm = float("inf")
@@ -63,30 +73,103 @@ def build_impact_segments(
         a, b = waypoints[i], waypoints[i + 1]
         length = haversine_nmi(a.location, b.location)
         cumulative.append(cumulative[-1] + length)
-        dist = _segment_closest_nm(a.location, b.location, threat.location)
-        band = band_for_distance(dist) if dist <= BAND_JAM_NM else "OUT"
-        if dist < closest_nm:
-            closest_nm = dist
+        sample_count = max(16, min(160, int(length / 2.0) + 1))
+        distances = [
+            haversine_nmi(_point_at(a.location, b.location, j / sample_count), threat.location)
+            for j in range(sample_count + 1)
+        ]
+        leg_closest = min(distances)
+        if leg_closest < closest_nm:
+            closest_nm = leg_closest
             closest_index = i
-        segments.append(
+        for j in range(sample_count):
+            mid = _point_at(a.location, b.location, (j + 0.5) / sample_count)
+            mid_distance = haversine_nmi(mid, threat.location)
+            exposure = exposure_for_distance(
+                mid_distance, lethal_radius_nmi=lethal, jam_radius_nmi=jam
+            )
+            start = _point_at(a.location, b.location, j / sample_count)
+            end = _point_at(a.location, b.location, (j + 1) / sample_count)
+            segments.append(
+                {
+                    "index": len(segments),
+                    "leg_index": i,
+                    "from_id": a.id,
+                    "to_id": b.id,
+                    "from_fraction": round(j / sample_count, 5),
+                    "to_fraction": round((j + 1) / sample_count, 5),
+                    "from_lat": round(start.lat, 5),
+                    "from_lon": round(start.lon, 5),
+                    "to_lat": round(end.lat, 5),
+                    "to_lon": round(end.lon, 5),
+                    "length_nmi": round(length / sample_count, 2),
+                    "closest_nm": round(min(distances[j], distances[j + 1]), 2),
+                    "exposure": exposure,
+                    "color": exposure_color(exposure),
+                    "impacted": exposure != "CLEAR",
+                }
+            )
+
+    # Merge adjacent impacted sub-segments on the same leg into spans, and
+    # collect explicit impacted route points (vertices + span boundaries).
+    exposure_spans: list[dict[str, Any]] = []
+    impacted_points: list[dict[str, Any]] = []
+    for seg in segments:
+        if not seg["impacted"]:
+            continue
+        if (
+            exposure_spans
+            and exposure_spans[-1]["leg_index"] == seg["leg_index"]
+            and exposure_spans[-1]["exposure"] == seg["exposure"]
+            and abs(exposure_spans[-1]["to_fraction"] - seg["from_fraction"]) < 1e-9
+        ):
+            exposure_spans[-1]["to_fraction"] = seg["to_fraction"]
+            exposure_spans[-1]["to_lat"] = seg["to_lat"]
+            exposure_spans[-1]["to_lon"] = seg["to_lon"]
+            continue
+        exposure_spans.append(
             {
-                "index": i,
-                "from_id": a.id,
-                "to_id": b.id,
-                "length_nmi": round(length, 2),
-                "closest_nm": round(dist, 2),
-                "band": band,
-                "color": band_color(band),
-                "impacted": dist <= BAND_JAM_NM,
+                "leg_index": seg["leg_index"],
+                "from_fraction": seg["from_fraction"],
+                "to_fraction": seg["to_fraction"],
+                "from_lat": seg["from_lat"],
+                "from_lon": seg["from_lon"],
+                "to_lat": seg["to_lat"],
+                "to_lon": seg["to_lon"],
+                "exposure": seg["exposure"],
+                "threat_id": threat.id,
+                "frequency_band": threat.frequency_band,
             }
         )
+    for span in exposure_spans:
+        for prefix in ("from", "to"):
+            impacted_points.append(
+                {
+                    "lat": span[f"{prefix}_lat"],
+                    "lon": span[f"{prefix}_lon"],
+                    "leg_index": span["leg_index"],
+                    "fraction": span["from_fraction"] if prefix == "from" else span["to_fraction"],
+                    "exposure": span["exposure"],
+                    "threat_id": threat.id,
+                    "frequency_band": threat.frequency_band,
+                }
+            )
 
     return {
         "segments": segments,
+        "exposure_spans": exposure_spans,
+        "impacted_points": impacted_points,
         "closest_index": closest_index,
         "closest_nm": round(closest_nm, 2) if closest_nm < float("inf") else None,
         "cumulative_nmi": [round(x, 2) for x in cumulative],
-        "band": band_for_distance(closest_nm) if closest_nm < float("inf") else "OUT",
+        "exposure": (
+            exposure_for_distance(
+                closest_nm, lethal_radius_nmi=lethal, jam_radius_nmi=jam
+            )
+            if closest_nm < float("inf")
+            else "CLEAR"
+        ),
+        "frequency_band": threat.frequency_band,
     }
 
 
@@ -98,14 +181,21 @@ def assess_route_threats(route: Route, threats: list[Threat]) -> list[dict[str, 
             dist = haversine_nmi(route.waypoints[0].location, threat.location)
             impact = {
                 "segments": [],
+                "exposure_spans": [],
+                "impacted_points": [],
                 "closest_index": 0,
                 "closest_nm": round(dist, 2),
                 "cumulative_nmi": [0.0],
-                "band": band_for_distance(dist),
+                "exposure": exposure_for_distance(
+                    dist,
+                    lethal_radius_nmi=float(threat.lethal_radius_nmi or 50.0),
+                    jam_radius_nmi=float(threat.jam_radius_nmi or 160.0),
+                ),
+                "frequency_band": threat.frequency_band,
             }
         else:
             impact = build_impact_segments(route.waypoints, threat)
-        if impact["closest_nm"] is None or impact["closest_nm"] > BAND_JAM_NM:
+        if impact["closest_nm"] is None or impact["exposure"] == "CLEAR":
             continue
         rows.append(
             {
@@ -113,12 +203,16 @@ def assess_route_threats(route: Route, threats: list[Threat]) -> list[dict[str, 
                 "threat_kind": threat.kind,
                 "threat_label": threat.label or threat.id,
                 "severity": threat.severity,
+                "frequency_band": threat.frequency_band,
                 "latitude": threat.location.lat,
                 "longitude": threat.location.lon,
                 "closest_approach_nm": impact["closest_nm"],
-                "band": impact["band"],
+                "exposure": impact["exposure"],
                 "impacted_segment_count": sum(1 for s in impact["segments"] if s["impacted"]),
+                "impacted_leg_count": len({s["leg_index"] for s in impact["segments"] if s["impacted"]}),
                 "segments": impact["segments"],
+                "exposure_spans": impact["exposure_spans"],
+                "impacted_points": impact["impacted_points"],
                 "closest_index": impact["closest_index"],
                 "cumulative_nmi": impact["cumulative_nmi"],
             }
