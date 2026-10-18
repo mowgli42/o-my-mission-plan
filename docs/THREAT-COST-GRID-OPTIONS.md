@@ -129,7 +129,7 @@ Weather analogue: turbulence index or wave height → soft cost; convective poly
 | **Reuse aviation weather routers** (AWRT-class, commercial EFB optimizers) | Concept match is strong; rarely open/embeddable; treat as design reference |
 | **Shared internal service** `CostFieldRouter` | **Best prototype:** one module, two field builders (`WeatherFieldBuilder` stub, `ThreatFieldBuilder` real) |
 
-**Opinionated choice:** implement **one** `grid_router` (A* on hex/square lattice). Feed it threat costs today; keep a stub interface so a future weather layer is another cost band, not another product.
+**Opinionated choice:** implement **one** `grid_router` (A* on hex/square lattice). Feed it threat costs today; keep a stub interface so a future weather layer is another cost layer, not another product.
 
 Do **not** vendor a full maritime stack just to dodge writing A* on a grid—we already have Dijkstra on the fix graph; extending to lattice cells is the small step.
 
@@ -182,7 +182,7 @@ Do **not** vendor a full maritime stack just to dodge writing A* on a grid—we 
 ## 8. Short answers to the design questions
 
 **“Similar to a weather map, not only logically?”**  
-Yes: same grid + cost + shortest path; UI as a color field; optional multi-layer costs (threat band today, weather band later).
+Yes: same grid + cost + shortest path; UI as a color field; optional multi-layer costs (threat layer today, weather layer later).
 
 **“Reuse an app that routes around weather?”**  
 Reuse the **pattern and ideally one internal router module**. Full maritime/aviation weather products are poor drop-in dependencies; plug threat fields into *our* grid router instead.

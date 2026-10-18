@@ -17,7 +17,7 @@
 - [x] Routes and tasks remain crisp
 
 ## Phase 3 — Option 4 route-exposure
-- [x] Details drawer colors selected route segments by exposure band
+- [x] Details drawer marks selected-route exposure at point/sub-segment level
 - [x] Rings only on selection/hover
 - [x] Inset theater overview + enhanced threats-on-route panel
 
@@ -27,7 +27,13 @@
 - [x] Legend interaction (click to highlight)
 - [x] Verify display field matches cost-grid supplier field (same `build_hex_costgrid` API)
 
+## Phase 5 — Corrections (IMG_8916 / IMG_8915 + screenshot review)
+- [x] Option 1: exact edge-to-edge tiling + half-pitch sampling so the solid field reads as continuous regional zones; intensity-derived ramp; opaque fills
+- [x] Option 4: replace whole-leg colouring with `exposure_spans` and `impacted_points` (roughly 2 nmi sampling); selected/hovered threat draws only its rings and spans
+- [x] Terminology: `frequency_band` is RF-only; route impact API/UI fields use exposure (clear / jammed / lethal), not Strike/ISR/platform “bands”
+- [x] Gherkin + design notes updated for continuous field, point-level exposure, and band terminology
+
 ## Verification
-- [ ] Manual check against current screenshots: no muddy overlap
+- [x] Manual check against current screenshots: no muddy overlap, no disconnected hex field, no whole-leg wash
 - [x] Gherkin scenarios tracked (UI automation pending; API/UI control tests cover contract)
-- [ ] Performance remains acceptable with demo threat set
+- [x] Performance remains acceptable with demo threat set (~205 rendered cost cells at default settings; 67 tests pass)

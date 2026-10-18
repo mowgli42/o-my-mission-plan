@@ -71,6 +71,9 @@ class Threat(BaseModel):
     label: Optional[str] = None
     lethal_radius_nmi: float = 50.0
     jam_radius_nmi: float = 160.0
+    # RF frequency band used by the threat/jammer (e.g. "S-band", "X-band").
+    # This is never a task type, platform type, or route-exposure state.
+    frequency_band: str = ""
 
 
 class Waypoint(BaseModel):

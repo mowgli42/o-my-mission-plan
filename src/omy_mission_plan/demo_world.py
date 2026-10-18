@@ -297,6 +297,7 @@ THREATS: list[Threat] = [
         label="Kuwait north SAM battery",
         lethal_radius_nmi=45.0,
         jam_radius_nmi=140.0,
+        frequency_band="S-band",
     ),
     Threat(
         id="THREAT-AAA-02",
@@ -306,6 +307,7 @@ THREATS: list[Threat] = [
         label="Basra AAA umbrella",
         lethal_radius_nmi=25.0,
         jam_radius_nmi=80.0,
+        frequency_band="X-band",
     ),
     Threat(
         id="THREAT-SAM-03",
@@ -315,6 +317,7 @@ THREATS: list[Threat] = [
         label="Baghdad south SAM",
         lethal_radius_nmi=55.0,
         jam_radius_nmi=160.0,
+        frequency_band="S-band",
     ),
     Threat(
         id="THREAT-INT-04",
@@ -324,6 +327,7 @@ THREATS: list[Threat] = [
         label="CAP intercept corridor",
         lethal_radius_nmi=30.0,
         jam_radius_nmi=100.0,
+        frequency_band="X-band",
     ),
 ]
 

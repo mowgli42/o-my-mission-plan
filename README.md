@@ -27,8 +27,9 @@ Captured from the live Plan / Options / Routes console after a plan cycle
 
 ### 1. Plan tab — solid weather-radar cost field
 
-Non-overlapping hex (or square) cells with a green → yellow → orange → red
-ramp. Cost field, vector rings, and threat points are independent toggles;
+Continuous, edge-to-edge hex (or square) cells with solid non-overlapping
+fills and a green → yellow → orange → red ramp, so neighbouring cells connect
+into regional zones. Cost field, vector rings, and threat points are independent toggles;
 legend documents **max** aggregation. Overlays sit on the suite's shared
 key-free dark base map (Leaflet, zoom capped at 12 — see
 [`docs/SHARED-DARK-MAP.md`](docs/SHARED-DARK-MAP.md)); **Theater** resets the view.
@@ -43,7 +44,7 @@ Efficient / Synchronized / Unexpected-axis working set with compare and prefer.
 
 ### 3. Routes overview — metrics + battlespace table
 
-Fleet GO / NO-GO metrics and route list with closest-threat bands.
+Fleet GO / NO-GO metrics and route list with per-route exposure (clear / jammed / lethal) and each threat's RF frequency band.
 
 ![Routes overview](docs/screenshots/03-routes-overview-metrics.png)
 
@@ -55,8 +56,10 @@ Shared time axis across platforms for TOT / sync analysis.
 
 ### 5. More details — route-exposure focus
 
-Selected route segments by clear / jam / lethal; rings on select or hover;
-inset theater field; threats-on-route with severity badges.
+Only the route points and short sub-segments actually inside a threat's
+coverage are marked clear / jammed / lethal (the base route stays crisp);
+rings draw only for the selected or hovered threat; inset theater field;
+side panel lists threats affecting the route with their RF frequency band.
 
 ![Route details — exposure + inset field](docs/screenshots/05-route-details-map-threats.png)
 
@@ -212,7 +215,7 @@ The live demo auto-loads the bundled **fuzzy-reconciler Gulf War EOB**
 | `planning.py` | Full plan cycle + dynamic insert via selected supplier |
 | `options.py` | Mission Options store (A/B/C, compare, re-run) |
 | `export_routes.py` | o-my-sim import bundle (`o-my.mission-plan.routes/v1`) |
-| `routes_overview.py` | Metrics, threat bands, debrief-style timelines |
+| `routes_overview.py` | Metrics, route exposure + frequency-band timelines |
 | `app.py` | FastAPI service + static UI |
 
 ### API
@@ -273,7 +276,7 @@ Set `NAV_SOURCE=fixture|xplane` for theater navaid density (default `fixture`; e
 ### UI (IxDF principles)
 
 Dark ops console aligned with **o-my-debrief** (timeline / key events) and
-**battlespace-manager** (route table, threat bands, map + segment timeline).
+**battlespace-manager** (route table, route exposure, map + segment timeline).
 **Options** tab showcases the CONOPS top-three working set; Plan for guess-and-see
 with a solid threat-weather cost field; Routes for fleet overview; More details
 for route-exposure coloring, inset theater field, and task breakout.

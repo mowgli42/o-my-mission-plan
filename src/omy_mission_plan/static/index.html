@@ -117,12 +117,12 @@
           <div id="cost-legend" class="cost-legend" hidden aria-label="Threat weather cost field legend">
             <div class="cost-legend-head">Threat weather · aggregation = <strong>max</strong></div>
             <div class="cost-legend-ramp" role="group" aria-label="Intensity levels">
-              <button type="button" class="cost-band" data-level="LOW" title="Filter LOW"><i class="band-low"></i>LOW</button>
-              <button type="button" class="cost-band" data-level="MEDIUM" title="Filter MEDIUM"><i class="band-med"></i>MEDIUM</button>
-              <button type="button" class="cost-band" data-level="HIGH" title="Filter HIGH"><i class="band-high"></i>HIGH</button>
-              <button type="button" class="cost-band" data-level="CRITICAL" title="Filter CRITICAL"><i class="band-crit"></i>CRITICAL</button>
+              <button type="button" class="cost-level" data-level="LOW" title="Highlight LOW intensity"><i class="level-low"></i>LOW</button>
+              <button type="button" class="cost-level" data-level="MEDIUM" title="Highlight MEDIUM intensity"><i class="level-med"></i>MEDIUM</button>
+              <button type="button" class="cost-level" data-level="HIGH" title="Highlight HIGH intensity"><i class="level-high"></i>HIGH</button>
+              <button type="button" class="cost-level" data-level="CRITICAL" title="Highlight CRITICAL intensity"><i class="level-crit"></i>CRITICAL</button>
             </div>
-            <p class="hint cost-legend-note">Click a band to highlight. Clear / jam / lethal rings are a separate toggle.</p>
+            <p class="hint cost-legend-note">Click an intensity level to highlight. Exposure states are clear / jammed / lethal; jam and lethal rings are a separate toggle. Frequency band means a threat/jammer RF band and is shown per threat.</p>
           </div>
           <div id="exposure-panel" class="exposure-panel" aria-live="polite"></div>
         </section>
@@ -216,7 +216,7 @@
           <section class="route-threat-panel" aria-label="Generated routes">
             <header>
               <h2>Generated routes</h2>
-              <p class="hint">Battlespace-style route list · closest threat band Strike ≤50 / EJ ≤100 / Jam ≤160 nm</p>
+              <p class="hint">Battlespace-style route list · exposure (clear / jammed / lethal) uses each threat's own radii · frequency band is its RF band</p>
             </header>
             <div class="table-wrap">
               <table id="routes-table">
@@ -227,7 +227,8 @@
                     <th>Tasks</th>
                     <th>Dist</th>
                     <th>Closest</th>
-                    <th>Band</th>
+                    <th>Exposure</th>
+                    <th>Frequency band</th>
                     <th>Wpn</th>
                     <th>Status</th>
                     <th></th>
@@ -280,10 +281,11 @@
                   <div id="detail-inset" class="base-map" role="img" aria-label="Inset theater cost field"></div>
                 </div>
               </div>
-              <div class="legend exposure-bands" aria-label="Route exposure bands">
-                <span><i class="band-clear"></i>Clear</span>
-                <span><i class="band-jam"></i>Jam</span>
-                <span><i class="band-lethal"></i>Lethal</span>
+              <div class="legend exposure-states" aria-label="Route exposure states">
+                <span><i class="state-clear"></i>Clear</span>
+                <span><i class="state-jammed"></i>Jammed</span>
+                <span><i class="state-lethal"></i>Lethal</span>
+                <span class="hint">Frequency band = threat/jammer RF band (per threat, not exposure)</span>
               </div>
               <div id="detail-segment-timeline" class="segment-timeline" aria-label="Route segment timeline"></div>
             </section>
@@ -303,7 +305,7 @@
           <div><strong>Plan tab</strong> Guess-and-see allocation + fuel GO/NO-GO.</div>
           <div><strong>Options tab</strong> CONOPS top-three — Efficient / Synchronized / Unexpected-axis compare.</div>
           <div><strong>Routes tab</strong> Battlespace route table + debrief timeline / key events.</div>
-          <div><strong>More details</strong> Map + threat bands + task breakout.</div>
+          <div><strong>More details</strong> Map + threat exposure / RF frequency bands + task breakout.</div>
           <div><strong>Shortcuts</strong> P plan · O options · E export · I insert · R reset · 1/2/3 tabs · ? help</div>
         </div>
       </details>

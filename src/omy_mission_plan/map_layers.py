@@ -33,28 +33,42 @@ def _cell_vertices(
     *,
     cell_style: str,
 ) -> list[list[float]]:
-    """Non-overlapping cell polygon in [lat, lon] pairs."""
+    """Edge-to-edge cell polygon in [lat, lon] pairs.
+
+    ``dlat``/``dlon`` are the centre spacings. Squares use exact half-spacings;
+    pointy-top hexagons use the matching hex tiling (centre spacing
+    ``sqrt(3) * rx`` horizontally and ``1.5 * ry`` vertically), so neighbours
+    share edges with neither gaps nor overlaps.
+    """
     style = (cell_style or "hex").lower()
     if style == "square":
-        # Half-steps leave a tiny gap avoided by using 0.49 so adjacent cells
-        # abut without stacking alpha through overlaps.
-        hx, hy = dlon * 0.49, dlat * 0.49
+        hx, hy = dlon * 0.5, dlat * 0.5
         return [
             [lat - hy, lon - hx],
             [lat - hy, lon + hx],
             [lat + hy, lon + hx],
             [lat + hy, lon - hx],
         ]
-    # Flat-top hex (default) — sized to abut without overlap.
-    rx, ry = dlon * 0.48, dlat * 0.55
+    rx, ry = dlon / math.sqrt(3.0), dlat / 1.5
     return [
-        [lat, lon + rx],
-        [lat + ry * 0.5, lon + rx * 0.5],
-        [lat + ry * 0.5, lon - rx * 0.5],
-        [lat, lon - rx],
-        [lat - ry * 0.5, lon - rx * 0.5],
-        [lat - ry * 0.5, lon + rx * 0.5],
+        [lat + ry, lon],
+        [lat + ry * 0.5, lon + rx],
+        [lat - ry * 0.5, lon + rx],
+        [lat - ry, lon],
+        [lat - ry * 0.5, lon - rx],
+        [lat + ry * 0.5, lon - rx],
     ]
+
+
+def _level_for_intensity(intensity: float) -> str:
+    """Intensity ramp level (not the contributing threat's severity label)."""
+    if intensity >= 3.25:
+        return "CRITICAL"
+    if intensity >= 2.0:
+        return "HIGH"
+    if intensity >= 0.9:
+        return "MEDIUM"
+    return "LOW"
 
 
 def build_hex_costgrid(
@@ -80,19 +94,24 @@ def build_hex_costgrid(
     style = (cell_style or "hex").lower()
     if style not in ("hex", "square"):
         style = "hex"
+    # The operator-facing cell-size control stays as selected. Rendering
+    # samples the same supplier formula on a half-pitch lattice so adjacent
+    # covered cells form continuous regional zones at demo scale.
+    render_cell_nmi = cell_nmi / 2.0
     # Approximate degrees per nmi
-    dlat = cell_nmi / 60.0
-    dlon = cell_nmi / (60.0 * max(0.5, math.cos(math.radians((min_lat + max_lat) / 2))))
+    dlat = render_cell_nmi / 60.0
+    dlon = render_cell_nmi / (
+        60.0 * max(0.5, math.cos(math.radians((min_lat + max_lat) / 2)))
+    )
     cells: list[dict[str, Any]] = []
     row = 0
     lat = min_lat
-    lat_step = dlat if style == "square" else dlat * 0.75
+    lat_step = dlat
     while lat <= max_lat:
         lon0 = min_lon + (0.5 * dlon if (style == "hex" and row % 2) else 0.0)
         lon = lon0
         while lon <= max_lon:
             intensity = 0.0
-            level = "NONE"
             for th in threats:
                 d = _haversine_nmi(lat, lon, th.location.lat, th.location.lon)
                 radius = float(th.jam_radius_nmi or 100.0)
@@ -102,7 +121,6 @@ def build_hex_costgrid(
                 contrib = w * (1.0 - d / radius)
                 if contrib > intensity:
                     intensity = contrib
-                    level = (th.severity or "MEDIUM").upper()
             if intensity > 0:
                 verts = _cell_vertices(lat, lon, dlat, dlon, cell_style=style)
                 cells.append(
@@ -110,7 +128,7 @@ def build_hex_costgrid(
                         "lat": round(lat, 4),
                         "lon": round(lon, 4),
                         "intensity": round(intensity, 3),
-                        "level": level,
+                        "level": _level_for_intensity(intensity),
                         "vertices": [[round(a, 4), round(b, 4)] for a, b in verts],
                     }
                 )
@@ -120,6 +138,8 @@ def build_hex_costgrid(
 
     return {
         "cell_nmi": cell_nmi,
+        "render_cell_nmi": render_cell_nmi,
+        "tiling": "edge-to-edge",
         "cell_style": style,
         "altitude_ft": altitude_ft,
         "altitude_note": (
@@ -147,52 +167,204 @@ def build_hex_costgrid(
     }
 
 
+def _exposure_at(distance_nmi: float, threat: Threat) -> str:
+    """Route-exposure state at one route point for one threat."""
+    if distance_nmi <= float(threat.lethal_radius_nmi or 50.0):
+        return "LETHAL"
+    if distance_nmi <= float(threat.jam_radius_nmi or 160.0):
+        return "JAMMED"
+    return "CLEAR"
+
+
+_EXPOSURE_RANK = {"CLEAR": 0, "JAMMED": 1, "LETHAL": 2}
+
+
+def _route_point(a: Any, b: Any, fraction: float) -> dict[str, float]:
+    return {
+        "lat": round(a.location.lat + (b.location.lat - a.location.lat) * fraction, 5),
+        "lon": round(a.location.lon + (b.location.lon - a.location.lon) * fraction, 5),
+    }
+
+
 def leg_exposure(
     threats: list[Threat],
     waypoints: list[Any],
     *,
-    samples_per_leg: int = 8,
+    sample_step_nmi: float = 2.0,
 ) -> list[dict[str, Any]]:
-    """Per-leg threats that 'see' the platform (jam or lethal intersection)."""
+    """Point/sub-segment exposure for each leg.
+
+    A leg is never classified as a single wash. It is sampled at roughly
+    ``sample_step_nmi`` intervals; consecutive samples with the same worst
+    exposure are merged into short ``exposure_spans`` with exact route
+    endpoints. Per-threat spans are retained so selecting one threat can show
+    only its affected sub-segments.
+    """
     out: list[dict[str, Any]] = []
     for i in range(len(waypoints) - 1):
         a, b = waypoints[i], waypoints[i + 1]
-        alat, alon = a.location.lat, a.location.lon
-        blat, blon = b.location.lat, b.location.lon
-        seen: list[dict[str, Any]] = []
-        for th in threats:
-            lethal = float(th.lethal_radius_nmi or 50.0)
-            jam = float(th.jam_radius_nmi or 160.0)
-            min_d = min(
-                _haversine_nmi(
-                    alat + (blat - alat) * t,
-                    alon + (blon - alon) * t,
-                    th.location.lat,
-                    th.location.lon,
+        leg_length = _haversine_nmi(
+            a.location.lat, a.location.lon, b.location.lat, b.location.lon
+        )
+        sample_count = max(16, min(160, math.ceil(leg_length / max(sample_step_nmi, 0.5))))
+        # Per-sample classification: aggregate worst state + per-threat state.
+        samples: list[dict[str, Any]] = []
+        for j in range(sample_count + 1):
+            fraction = j / sample_count
+            point = _route_point(a, b, fraction)
+            per_threat: dict[str, tuple[str, float]] = {}
+            worst = "CLEAR"
+            for th in threats:
+                distance = _haversine_nmi(
+                    point["lat"], point["lon"], th.location.lat, th.location.lon
                 )
-                for t in [j / samples_per_leg for j in range(samples_per_leg + 1)]
+                exposure = _exposure_at(distance, th)
+                per_threat[th.id] = (exposure, distance)
+                if _EXPOSURE_RANK[exposure] > _EXPOSURE_RANK[worst]:
+                    worst = exposure
+            samples.append(
+                {
+                    "fraction": fraction,
+                    "point": point,
+                    "exposure": worst,
+                    "per_threat": per_threat,
+                }
             )
-            band = None
-            if min_d <= lethal:
-                band = "LETHAL"
-            elif min_d <= jam:
-                band = "JAM"
-            if band:
-                seen.append(
+
+        # Intervals between sample points, classified at their midpoint.
+        intervals: list[dict[str, Any]] = []
+        for j in range(sample_count):
+            from_fraction = j / sample_count
+            to_fraction = (j + 1) / sample_count
+            midpoint = _route_point(a, b, (from_fraction + to_fraction) / 2)
+            per_threat: dict[str, tuple[str, float]] = {}
+            worst = "CLEAR"
+            for th in threats:
+                distance = _haversine_nmi(
+                    midpoint["lat"], midpoint["lon"], th.location.lat, th.location.lon
+                )
+                exposure = _exposure_at(distance, th)
+                per_threat[th.id] = (exposure, distance)
+                if _EXPOSURE_RANK[exposure] > _EXPOSURE_RANK[worst]:
+                    worst = exposure
+            intervals.append(
+                {
+                    "from_fraction": from_fraction,
+                    "to_fraction": to_fraction,
+                    "exposure": worst,
+                    "per_threat": per_threat,
+                }
+            )
+
+        # Aggregate spans (worst state across threats on each interval).
+        exposure_spans: list[dict[str, Any]] = []
+        start = 0
+        for j in range(1, len(intervals) + 1):
+            current = intervals[start]["exposure"]
+            if j < len(intervals) and intervals[j]["exposure"] == current:
+                continue
+            if current != "CLEAR":
+                midpoint = intervals[(start + j - 1) // 2]
+                exposure_spans.append(
                     {
-                        "threat_id": th.id,
-                        "kind": th.kind,
-                        "severity": th.severity,
-                        "band": band,
-                        "closest_nm": round(min_d, 1),
+                        "leg_index": i,
+                        "from_fraction": round(intervals[start]["from_fraction"], 5),
+                        "to_fraction": round(intervals[j - 1]["to_fraction"], 5),
+                        "from": _route_point(a, b, intervals[start]["from_fraction"]),
+                        "to": _route_point(a, b, intervals[j - 1]["to_fraction"]),
+                        "exposure": current,
+                        "threat_ids": [
+                            threat_id
+                            for threat_id, (state, _d) in midpoint["per_threat"].items()
+                            if state != "CLEAR"
+                        ],
                     }
                 )
+            start = j
+
+        seen: list[dict[str, Any]] = []
+        impacted_points: list[dict[str, Any]] = []
+        for sample in samples:
+            if sample["exposure"] == "CLEAR":
+                continue
+            # Keep route vertices and span boundaries as explicit points;
+            # span endpoints are added below, vertices are fractions 0/1.
+            if sample["fraction"] in (0.0, 1.0):
+                impacted_points.append(
+                    {
+                        **sample["point"],
+                        "leg_index": i,
+                        "fraction": round(sample["fraction"], 5),
+                        "exposure": sample["exposure"],
+                        "threat_ids": [
+                            threat_id
+                            for threat_id, (state, _d) in sample["per_threat"].items()
+                            if state != "CLEAR"
+                        ],
+                    }
+                )
+        for span in exposure_spans:
+            for key in ("from", "to"):
+                impacted_points.append(
+                    {
+                        **span[key],
+                        "leg_index": i,
+                        "fraction": span["from_fraction"] if key == "from" else span["to_fraction"],
+                        "exposure": span["exposure"],
+                        "threat_ids": list(span["threat_ids"]),
+                    }
+                )
+
+        for th in threats:
+            states = [sample["per_threat"][th.id] for sample in samples]
+            exposed_states = [(state, dist) for state, dist in states if state != "CLEAR"]
+            if not exposed_states:
+                continue
+            worst = max((state for state, _d in exposed_states), key=_EXPOSURE_RANK.get)
+            threat_spans: list[dict[str, Any]] = []
+            start = 0
+            for j in range(1, len(intervals) + 1):
+                current = intervals[start]["per_threat"][th.id][0]
+                if j < len(intervals) and intervals[j]["per_threat"][th.id][0] == current:
+                    continue
+                if current != "CLEAR":
+                    threat_spans.append(
+                        {
+                            "leg_index": i,
+                            "from_fraction": round(intervals[start]["from_fraction"], 5),
+                            "to_fraction": round(intervals[j - 1]["to_fraction"], 5),
+                            "from": _route_point(a, b, intervals[start]["from_fraction"]),
+                            "to": _route_point(a, b, intervals[j - 1]["to_fraction"]),
+                            "exposure": current,
+                            "threat_ids": [th.id],
+                        }
+                    )
+                start = j
+            seen.append(
+                {
+                    "threat_id": th.id,
+                    "kind": th.kind,
+                    "severity": th.severity,
+                    "frequency_band": th.frequency_band,
+                    "exposure": worst,
+                    "closest_nm": round(min(dist for _s, dist in states), 1),
+                    "spans": threat_spans,
+                }
+            )
+
         out.append(
             {
                 "from_id": a.id,
                 "to_id": b.id,
                 "leg_index": i,
-                "exposed": bool(seen),
+                "exposed": bool(exposure_spans),
+                "worst_exposure": max(
+                    (span["exposure"] for span in exposure_spans),
+                    key=_EXPOSURE_RANK.get,
+                    default="CLEAR",
+                ),
+                "exposure_spans": exposure_spans,
+                "impacted_points": impacted_points,
                 "threats": seen,
             }
         )
@@ -224,10 +396,17 @@ def build_exposure_report(
             )
             continue
         legs = leg_exposure(threats, p.route.waypoints)
-        seeing = {}
+        seeing: dict[str, dict[str, Any]] = {}
         for leg in legs:
             for t in leg["threats"]:
-                seeing[t["threat_id"]] = t
+                existing = seeing.get(t["threat_id"])
+                if existing is None:
+                    seeing[t["threat_id"]] = {**t, "spans": list(t.get("spans") or [])}
+                    continue
+                existing["spans"].extend(t.get("spans") or [])
+                existing["closest_nm"] = min(existing["closest_nm"], t["closest_nm"])
+                if _EXPOSURE_RANK[t["exposure"]] > _EXPOSURE_RANK[existing["exposure"]]:
+                    existing["exposure"] = t["exposure"]
         platforms.append(
             {
                 "aircraft_id": p.aircraft_id,
@@ -240,8 +419,9 @@ def build_exposure_report(
     return {
         "sees_mode": SEES_MODE,
         "note": (
-            "A threat 'sees' a platform when any sampled point on a leg is inside "
-            "lethal (hard) or jam (soft) radius — same radii used for costgrid penalties."
+            "A threat 'sees' a platform when a sampled route point or sub-segment is inside "
+            "its lethal (hard) or jammed (soft) radius — same radii used for costgrid penalties. "
+            "Exposure states are clear / jammed / lethal; frequency_band is the threat's RF band."
         ),
         "platforms": platforms,
     }
@@ -339,7 +519,7 @@ def build_aligned_timeline(
         mean = float(sync["mean_strike_tot_minutes"])
         windows.append(
             {
-                "kind": "tot_band",
+                "kind": "tot_window",
                 "t0": max(0.0, mean - 7.5),
                 "t1": mean + 7.5,
                 "label": "TOT window (±7.5m)",
