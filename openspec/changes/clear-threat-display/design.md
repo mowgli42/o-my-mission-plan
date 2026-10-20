@@ -18,6 +18,9 @@
 - Threat centres stay as points. Jam and lethal rings remain a separate toggle.
 - Routes and task markers are drawn after the field and remain crisp on top.
 - The displayed intensity uses the same jam-radius falloff, severity weights, and max aggregation as the cost-grid supplier. The supplier and display must not silently diverge.
+- Field **bounds** are derived from the live threat set: each jam disc plus padding, floored on the PSAB theater box. A fixed `max_lat=34` must not clip Baghdad / northern Iraq weather.
+- Region/EOB ingest fills missing `frequency_band` from explicit `attributes.band`, ELNOT hints, or category defaults so every emitter participates in RF-band filtering.
+- An **RF band** control sits beside the altitude selector: **All bands** (composite all-up overlay) or one frequency band (S-band, X-band, …). The selected band filters both the cost field and threat points so operators can see which emitters that weather represents.
 
 ## Option 4 — Route-exposure focus (IMG_8915 direction)
 

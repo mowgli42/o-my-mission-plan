@@ -71,3 +71,18 @@ Feature: Clear threat weather displays
     Then onboard jam support packages are listed on the Onboard rail with their RF frequency band
     And offboard escort or standoff jam support from other platforms is listed on the Offboard rail when available
     And empty rails state that no jam support is assigned rather than implying exposure colouring
+
+  Scenario: Threat weather fully surrounds each jam disc
+    Given theater threats including emitters in Kuwait and Iraq
+    When the cost grid is built
+    Then the field bounds expand to enclose every threat jam radius plus padding
+    And weather around Baghdad and northern Iraq is not clipped by a fixed southern theater box
+
+  Scenario: Frequency band filter isolates emitters on the weather overlay
+    Given threats that operate on more than one RF frequency band
+    When the operator selects All bands
+    Then the cost field is the composite all-up weather overlay
+    When the operator selects a single frequency band
+    Then only emitters on that RF band contribute to the cost field
+    And only those emitters are shown as threat points
+    And frequency band still means an RF band, not a task or platform type

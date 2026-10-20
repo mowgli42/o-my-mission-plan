@@ -115,6 +115,27 @@ def test_costgrid_and_exposure_and_timeline_apis():
 
     assert cg["tiling"] == "edge-to-edge"
     assert cg["render_cell_nmi"] == cg["cell_nmi"] / 2
+    # Jam discs (e.g. Baghdad SAM) must not be clipped at the old max_lat=34.
+    assert cg["bounds"]["max_lat"] > 34.0
+    assert "available_frequency_bands" in cg
+    assert cg["frequency_band"] == "all"
+    assert cg["threat_count"] == cg["threat_count_all"]
+
+    bands = cg["available_frequency_bands"]
+    assert bands
+    sample_band = bands[0]
+    filtered = client.get(f"/api/map/costgrid?frequency_band={sample_band}").json()
+    assert filtered["frequency_band"] == sample_band
+    assert filtered["threat_count"] <= filtered["threat_count_all"]
+    assert filtered["threat_count"] >= 1
+    # Band filter changes which emitters contribute; cell set should differ
+    # from the all-up overlay for a multi-band theater.
+    if len(bands) > 1:
+        assert filtered["cell_count"] != cg["cell_count"] or filtered["threat_count"] < cg["threat_count"]
+
+    world = client.get("/api/world").json()
+    assert world["available_frequency_bands"]
+    assert world["field_bounds"]["max_lat"] > 34.0
 
     bad = client.get("/api/map/costgrid?cell_style=triangle")
     assert bad.status_code == 400
@@ -214,3 +235,6 @@ def test_ui_has_new_controls():
     assert "weather_impact" in js or "weather-impact" in js
     assert "jam-mark" in js
     assert "Offboard" in js
+    assert "sel-frequency-band" in html
+    assert "frequency_band" in js
+    assert "threatMatchesFrequencyBand" in js

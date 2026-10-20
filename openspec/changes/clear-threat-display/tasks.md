@@ -38,6 +38,12 @@
 - [x] Onboard / Offboard jam-support rails list jammer packages with RF frequency band
 - [x] Gherkin + design notes + screenshot 05 updated
 
+## Phase 7 — Threat data bounds + RF band filter
+- [x] Cost-field bounds expand from each threat jam disc (no Iraq clip at lat 34)
+- [x] Region ingest / fixture fills missing frequency bands (ELNOT / category defaults)
+- [x] All-up vs per-band weather selector; threat points filtered with the field
+- [x] Gherkin + design notes updated
+
 ## Verification
 - [x] Manual check against current screenshots: no muddy overlap, no disconnected hex field, no whole-leg wash
 - [x] Details Impact rail shows green→yellow→orange→red matching Plan weather under the route

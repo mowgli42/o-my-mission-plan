@@ -64,6 +64,8 @@ class WorldSnapshot(BaseModel):
     navaid_count: int = 0
     platform_order: list[str] = Field(default_factory=list)
     platform_group_by_type: bool = True
+    available_frequency_bands: list[str] = Field(default_factory=list)
+    field_bounds: dict = Field(default_factory=dict)
 
 
 class PlanningSession:
@@ -128,6 +130,8 @@ class PlanningSession:
         )
 
     def snapshot(self) -> WorldSnapshot:
+        from .map_layers import available_frequency_bands, field_bounds_for_threats
+
         return WorldSnapshot(
             scenario_id=demo_world.SCENARIO_ID,
             scenario_name=demo_world.SCENARIO_NAME,
@@ -154,6 +158,8 @@ class PlanningSession:
             navaid_count=len(self.navaids),
             platform_order=list(getattr(self, "platform_order", [a.id for a in self.aircraft])),
             platform_group_by_type=bool(getattr(self, "platform_group_by_type", True)),
+            available_frequency_bands=available_frequency_bands(self.threats),
+            field_bounds=field_bounds_for_threats(self.threats),
         )
 
     def set_platform_order(self, order: list[str], *, group_by_type: Optional[bool] = None) -> dict[str, Any]:
@@ -354,7 +360,7 @@ class PlanningSession:
         self,
         path: Path | str | None = None,
         *,
-        max_threats: int = 16,
+        max_threats: int = 32,
         replace_demo_threats: bool = True,
     ) -> dict[str, Any]:
         """Load fuzzy-reconciler fixed threats into the live session.

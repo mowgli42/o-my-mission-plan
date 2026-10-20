@@ -93,6 +93,11 @@
                 <option value="20000">FL200</option>
               </select>
             </label>
+            <label class="field-ctrl">RF band
+              <select id="sel-frequency-band" title="All-up weather or one RF frequency band">
+                <option value="all" selected>All bands</option>
+              </select>
+            </label>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-fit-theater" title="Reset map to the PSAB → Kuwait / Iraq theater">Theater</button>
             <span id="nav-source-badge" class="badge badge-idle" title="NAV_SOURCE">nav: fixture</span>
           </div>
@@ -122,7 +127,7 @@
               <button type="button" class="cost-level" data-level="HIGH" title="Highlight HIGH intensity"><i class="level-high"></i>HIGH</button>
               <button type="button" class="cost-level" data-level="CRITICAL" title="Highlight CRITICAL intensity"><i class="level-crit"></i>CRITICAL</button>
             </div>
-            <p class="hint cost-legend-note">Click an intensity level to highlight. Exposure states are clear / jammed / lethal; jam and lethal rings are a separate toggle. Frequency band means a threat/jammer RF band and is shown per threat.</p>
+            <p class="hint cost-legend-note">Click an intensity level to highlight. Use <strong>RF band</strong> for the all-up weather overlay or a single frequency band so only matching emitters contribute. Exposure states are clear / jammed / lethal; jam and lethal rings are a separate toggle. Frequency band means a threat/jammer RF band, not a task or platform type.</p>
           </div>
           <div id="exposure-panel" class="exposure-panel" aria-live="polite"></div>
         </section>
