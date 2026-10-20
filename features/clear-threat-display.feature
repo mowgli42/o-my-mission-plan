@@ -56,3 +56,33 @@ Feature: Clear threat weather displays
     Then a persistent legend explains the intensity ramp and the clear, jammed, and lethal exposure states
     And the legend states that frequency band is a threat or jammer RF band shown separately from exposure
     And aggregation rule (max overlapping contribution) is noted
+
+  Scenario: Details Impact timeline matches route colour through the weather field
+    Given a selected aircraft route in the details view
+    When the route timeline is shown
+    Then the Impact rail is coloured with the same green to yellow to orange to red intensity ramp as the Plan cost field under the route
+    And clear stretches of the route remain the clear (dark) weather colour rather than an exposure teal wash
+    And jam and lethal exposure language stays on the map marks and side panel, not as the Impact rail encoding
+
+  Scenario: Onboard and offboard jam support appear on the route timeline
+    Given a selected aircraft route in the details view
+    And the aircraft or fleet carries jammer packages
+    When the route timeline is shown
+    Then onboard jam support packages are listed on the Onboard rail with their RF frequency band
+    And offboard escort or standoff jam support from other platforms is listed on the Offboard rail when available
+    And empty rails state that no jam support is assigned rather than implying exposure colouring
+
+  Scenario: Threat weather fully surrounds each jam disc
+    Given theater threats including emitters in Kuwait and Iraq
+    When the cost grid is built
+    Then the field bounds expand to enclose every threat jam radius plus padding
+    And weather around Baghdad and northern Iraq is not clipped by a fixed southern theater box
+
+  Scenario: Frequency band filter isolates emitters on the weather overlay
+    Given threats that operate on more than one RF frequency band
+    When the operator selects All bands
+    Then the cost field is the composite all-up weather overlay
+    When the operator selects a single frequency band
+    Then only emitters on that RF band contribute to the cost field
+    And only those emitters are shown as threat points
+    And frequency band still means an RF band, not a task or platform type

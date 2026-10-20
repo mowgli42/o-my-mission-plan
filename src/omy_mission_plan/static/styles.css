@@ -996,6 +996,68 @@ a {
   background: rgba(148, 163, 184, 0.35);
   transform: translateY(-50%);
 }
+.seg-line.weather-impact {
+  gap: 0;
+  height: 16px;
+}
+
+.weather-ramp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.9rem;
+  margin-top: 0.55rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+  align-items: center;
+}
+.weather-ramp-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 0.3rem;
+  vertical-align: -1px;
+}
+
+.jam-rail {
+  min-height: 32px;
+}
+.jam-rail .jam-mark {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 18px;
+  border-radius: 3px;
+  font-size: 0.58rem;
+  line-height: 18px;
+  padding: 0 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  z-index: 1;
+}
+.jam-rail .jam-onboard {
+  background: rgba(61, 214, 198, 0.28);
+  border-color: rgba(61, 214, 198, 0.65);
+  color: #b7f5ee;
+}
+.jam-rail .jam-offboard {
+  background: rgba(167, 139, 250, 0.28);
+  border-color: rgba(167, 139, 250, 0.65);
+  color: #ddd6fe;
+}
+.jam-rail .jam-empty {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.62rem;
+  color: #64748b;
+  font-style: italic;
+}
+
 .task-rail .task-mark {
   position: absolute;
   top: 50%;

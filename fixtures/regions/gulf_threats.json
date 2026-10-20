@@ -90,7 +90,8 @@
         "be_number": "BE000003",
         "o_suffix": "A",
         "mobility": "FIXED",
-        "operational_status": "operational"
+        "operational_status": "operational",
+        "band": "C-band"
       },
       "original_row": {
         "site_id": "GUL-00003",
@@ -120,7 +121,8 @@
         "height_m": 9.9,
         "range_km": 369.3,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00023",
@@ -150,7 +152,8 @@
         "height_m": 43.6,
         "range_km": 138.2,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00033",
@@ -180,7 +183,8 @@
         "height_m": 49.8,
         "range_km": 438.4,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00043",
@@ -210,7 +214,8 @@
         "height_m": 41.4,
         "range_km": 387.2,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00053",
@@ -240,7 +245,8 @@
         "height_m": 31.8,
         "range_km": 285.2,
         "operator": "Gulf Ops",
-        "anchor": "Nasiriyah area"
+        "anchor": "Nasiriyah area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00055",
@@ -270,7 +276,8 @@
         "height_m": 50.5,
         "range_km": 74.8,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00063",
@@ -300,7 +307,8 @@
         "height_m": 12.6,
         "range_km": 157.8,
         "operator": "Gulf Ops",
-        "anchor": "Mosul area"
+        "anchor": "Mosul area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00073",
@@ -649,7 +657,8 @@
         "status": "maintenance",
         "height_m": 46.8,
         "operator": "Gulf Ops",
-        "anchor": "Kuwait northern"
+        "anchor": "Kuwait northern",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00004",
@@ -677,7 +686,8 @@
         "status": "active",
         "height_m": 48.4,
         "operator": "Gulf Ops",
-        "anchor": "Kuwait northern"
+        "anchor": "Kuwait northern",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00014",
@@ -705,7 +715,8 @@
         "status": "active",
         "height_m": 19.1,
         "operator": "Gulf Ops",
-        "anchor": "Kuwait northern"
+        "anchor": "Kuwait northern",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00024",
@@ -733,7 +744,8 @@
         "status": "standby",
         "height_m": 51.0,
         "operator": "Gulf Ops",
-        "anchor": "Kuwait northern"
+        "anchor": "Kuwait northern",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00034",
@@ -761,7 +773,8 @@
         "status": "active",
         "height_m": 59.4,
         "operator": "Gulf Ops",
-        "anchor": "Nasiriyah area"
+        "anchor": "Nasiriyah area",
+        "band": "X-band"
       },
       "original_row": {
         "site_id": "GUL-00005",
@@ -789,7 +802,8 @@
         "status": "active",
         "height_m": 30.5,
         "operator": "Gulf Ops",
-        "anchor": "Nasiriyah area"
+        "anchor": "Nasiriyah area",
+        "band": "X-band"
       },
       "original_row": {
         "site_id": "GUL-00025",
@@ -817,7 +831,8 @@
         "status": "standby",
         "height_m": 38.8,
         "operator": "Gulf Ops",
-        "anchor": "Nasiriyah area"
+        "anchor": "Nasiriyah area",
+        "band": "X-band"
       },
       "original_row": {
         "site_id": "GUL-00035",
@@ -845,7 +860,8 @@
         "status": "active",
         "height_m": 30.4,
         "operator": "Gulf Ops",
-        "anchor": "Baghdad corridor"
+        "anchor": "Baghdad corridor",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00011",
@@ -873,7 +889,8 @@
         "status": "degraded",
         "height_m": 18.3,
         "operator": "Gulf Ops",
-        "anchor": "Kirkuk area"
+        "anchor": "Kirkuk area",
+        "band": "S-band"
       },
       "original_row": {
         "site_id": "GUL-00060",

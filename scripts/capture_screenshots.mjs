@@ -110,8 +110,25 @@ await page.waitForFunction(() => {
   const cells = document.querySelectorAll("#map .cost-cell, #map polygon.cost-cell");
   return legend && !legend.hidden && cells.length > 0;
 }, { timeout: 20000 });
-await page.waitForTimeout(400);
+// Fit theater so jam discs in northern Iraq are in frame (bounds expand with threats).
+await page.click("#btn-fit-theater");
+await page.waitForTimeout(500);
 await shotViewport("01-plan-psab-world");
+
+// 01b — same field filtered to one RF band (S-band) so emitters isolate
+const bandSel = page.locator("#sel-frequency-band");
+if (await bandSel.count()) {
+  const hasS = await page.evaluate(() =>
+    [...document.querySelectorAll("#sel-frequency-band option")].some((o) => o.value === "S-band"),
+  );
+  if (hasS) {
+    await bandSel.selectOption("S-band");
+    await page.waitForTimeout(800);
+    await shotViewport("01b-plan-s-band-weather");
+    await bandSel.selectOption("all");
+    await page.waitForTimeout(600);
+  }
+}
 
 // 02 — Options A/B/C
 await page.click("#tab-options");
@@ -137,10 +154,13 @@ await page.click('.subtab[data-routes-pane="timeline"]');
 await page.waitForTimeout(800);
 await shot("04-aligned-timeline");
 
-// 05 — Details drawer: route-exposure focus + inset theater field
+// 05 — Details drawer: route-exposure focus + weather Impact rail + jam rails
 await page.click('.subtab[data-routes-pane="table"]');
 await page.waitForTimeout(300);
-await page.locator("#routes-tbody tr[data-route]").first().click();
+// Prefer a deep-threat route so Impact shows green→yellow→orange→red.
+const deepThreat = page.locator("#routes-tbody tr[data-route]").filter({ hasText: "Viper-3" });
+if (await deepThreat.count()) await deepThreat.first().click();
+else await page.locator("#routes-tbody tr[data-route]").first().click();
 await page.waitForTimeout(400);
 await page.click("#btn-more-details");
 await page.waitForSelector("#details-drawer:not([hidden])");

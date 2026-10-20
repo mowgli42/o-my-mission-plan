@@ -29,12 +29,19 @@ Captured from the live Plan / Options / Routes console after a plan cycle
 
 Continuous, edge-to-edge hex (or square) cells with solid non-overlapping
 fills and a green → yellow → orange → red ramp, so neighbouring cells connect
-into regional zones. Cost field, vector rings, and threat points are independent toggles;
-legend documents **max** aggregation. Overlays sit on the suite's shared
-key-free dark base map (Leaflet, zoom capped at 12 — see
+into regional zones. Field bounds expand to enclose every threat jam disc
+(including Baghdad / northern Iraq). **RF band** selects the all-up overlay or
+one frequency band so only matching emitters contribute. Cost field, vector
+rings, and threat points are independent toggles; legend documents **max**
+aggregation. Overlays sit on the suite's shared key-free dark base map
+(Leaflet, zoom capped at 12 — see
 [`docs/SHARED-DARK-MAP.md`](docs/SHARED-DARK-MAP.md)); **Theater** resets the view.
 
 ![Plan PSAB world — solid threat weather field](docs/screenshots/01-plan-psab-world.png)
+
+S-band-only weather (same ramp; X/C/L/UHF emitters hidden):
+
+![Plan — S-band weather filter](docs/screenshots/01b-plan-s-band-weather.png)
 
 ### 2. Options tab — top-three Mission Options A/B/C
 
@@ -60,6 +67,9 @@ Only the route points and short sub-segments actually inside a threat's
 coverage are marked clear / jammed / lethal (the base route stays crisp);
 rings draw only for the selected or hovered threat; inset theater field;
 side panel lists threats affecting the route with their RF frequency band.
+The Impact timeline uses the same green → yellow → orange → red weather
+ramp as the Plan cost field under the route; onboard and offboard jam
+support packages are listed on their own rails with RF frequency band.
 
 ![Route details — exposure + inset field](docs/screenshots/05-route-details-map-threats.png)
 

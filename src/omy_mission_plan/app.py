@@ -36,8 +36,13 @@ session = PlanningSession()
 
 
 def _ingest_gulf_eob_on_boot() -> bool:
-    """Load bundled fuzzy-reconciler Gulf EOB and run an initial plan cycle."""
-    flag = os.environ.get("INGEST_GULF_EOB", "1" if ON_VERCEL else "0").strip().lower()
+    """Load bundled fuzzy-reconciler Gulf EOB and run an initial plan cycle.
+
+    Defaults on so Mosul / northern Iraq emitters contribute to the weather
+    field locally and on Vercel. Set ``INGEST_GULF_EOB=0`` to keep the four
+    hardcoded demo threats only.
+    """
+    flag = os.environ.get("INGEST_GULF_EOB", "1").strip().lower()
     return flag in {"1", "true", "yes", "on"}
 
 
@@ -47,7 +52,9 @@ def _bootstrap_gulf_eob() -> dict[str, Any] | None:
     source = default_fixture_path()
     if not source.is_file():
         return {"error": f"gulf fixture missing: {source}"}
-    ingest = session.ingest_region_threats(source, max_threats=16, replace_demo_threats=True)
+    # Ingest the full bundled Gulf EOB so Mosul / northern Iraq emitters
+    # contribute to the weather field instead of stopping at the demo four.
+    ingest = session.ingest_region_threats(source, max_threats=32, replace_demo_threats=True)
     plan = session.run_plan_cycle()
     return {
         "source": str(source),
@@ -175,7 +182,7 @@ class RegionIngestRequest(BaseModel):
     region: str = "gulf"
     region_file: Optional[str] = None
     sibling: bool = False
-    max_threats: int = Field(default=16, ge=1, le=200)
+    max_threats: int = Field(default=32, ge=1, le=200)
     replace_demo_threats: bool = True
     run_plan: bool = True
 
@@ -562,8 +569,14 @@ def map_costgrid(
     cell_nmi: float = 45.0,
     cell_style: str = "hex",
     altitude_ft: Optional[float] = None,
+    frequency_band: Optional[str] = None,
 ):
-    """Solid cost field from theater threats (display only; pairs with costgrid supplier)."""
+    """Solid cost field from theater threats (display only; pairs with costgrid supplier).
+
+    ``frequency_band`` filters the all-up overlay to one RF band (e.g. S-band).
+    Omit or pass ``all`` for the composite field. Bounds expand to enclose each
+    threat's jam disc so northern Iraq weather is not clipped.
+    """
     from .map_layers import build_hex_costgrid
 
     style = (cell_style or "hex").lower()
@@ -576,6 +589,7 @@ def map_costgrid(
         cell_nmi=cell_nmi,
         cell_style=style,
         altitude_ft=altitude_ft,
+        frequency_band=frequency_band,
     )
 
 

@@ -18,6 +18,9 @@
 - Threat centres stay as points. Jam and lethal rings remain a separate toggle.
 - Routes and task markers are drawn after the field and remain crisp on top.
 - The displayed intensity uses the same jam-radius falloff, severity weights, and max aggregation as the cost-grid supplier. The supplier and display must not silently diverge.
+- Field **bounds** are derived from the live threat set: each jam disc plus padding, floored on the PSAB theater box. A fixed `max_lat=34` must not clip Baghdad / northern Iraq weather.
+- Region/EOB ingest fills missing `frequency_band` from explicit `attributes.band`, ELNOT hints, or category defaults so every emitter participates in RF-band filtering.
+- An **RF band** control sits beside the altitude selector: **All bands** (composite all-up overlay) or one frequency band (S-band, X-band, …). The selected band filters both the cost field and threat points so operators can see which emitters that weather represents.
 
 ## Option 4 — Route-exposure focus (IMG_8915 direction)
 
@@ -26,6 +29,8 @@
 - Each leg is sampled at roughly 2 nmi intervals. Consecutive impacted intervals are merged into short `exposure_spans` with route endpoints (`from`/`to`, fractions, lat/lon), and explicit `impacted_points` mark route vertices and span boundaries inside coverage.
 - When no threat is selected, aggregate impacted sub-segments for affecting threats may be shown. When a threat is selected or hovered, only that threat's rings are drawn cleanly and its per-threat spans are used for the exposure marks.
 - A small inset theater overview shows the same solid field (opaque, simplified by scale), and the side panel lists threats affecting the route with exposure, severity, closest approach, impacted sub-segment count, and frequency band.
+- The details **Impact** rail is **not** coloured with clear/jammed/lethal exposure teal/yellow/red. It is a distance-axis profile of the route through the cost field: each merged sample uses the same intensity formula and green → yellow → orange → red ramp as Plan cells (`weather_impact` on the routes overview). Clear stretches stay dark. Exposure language remains on map marks and the threats side panel.
+- **Onboard** and **Offboard** jam-support rails list jammer packages (`Aircraft.jam_support`) along the same distance axis. Onboard packages come from the selected aircraft; offboard escort/standoff packages come from other fleet aircraft into weather windows. Each mark shows the package label and its RF frequency band. Empty rails say so explicitly.
 
 ## Terminology: frequency band vs exposure
 

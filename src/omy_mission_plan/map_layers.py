@@ -71,16 +71,95 @@ def _level_for_intensity(intensity: float) -> str:
     return "LOW"
 
 
+# Default PSAB → Kuwait/Iraq theater when no threats are loaded.
+DEFAULT_FIELD_BOUNDS = {
+    "min_lat": 23.5,
+    "max_lat": 34.0,
+    "min_lon": 43.5,
+    "max_lon": 51.5,
+}
+
+
+def _normalize_frequency_band(value: Optional[str]) -> Optional[str]:
+    """Return a filter band, or None for the all-up overlay."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"all", "*", "any"}:
+        return None
+    return text
+
+
+def available_frequency_bands(threats: list[Threat]) -> list[str]:
+    """Sorted unique RF frequency bands present on the threat set."""
+    bands = {str(th.frequency_band).strip() for th in threats if th.frequency_band}
+    return sorted(bands)
+
+
+def filter_threats_by_frequency_band(
+    threats: list[Threat],
+    frequency_band: Optional[str],
+) -> list[Threat]:
+    """Keep threats whose RF frequency band matches, or all when unfiltered."""
+    band = _normalize_frequency_band(frequency_band)
+    if band is None:
+        return list(threats)
+    return [th for th in threats if str(th.frequency_band or "").strip() == band]
+
+
+def field_bounds_for_threats(
+    threats: list[Threat],
+    *,
+    padding_nmi: float = 80.0,
+    floor: Optional[dict[str, float]] = None,
+) -> dict[str, float]:
+    """Bounds that fully enclose each threat's jam disc plus padding.
+
+    The previous fixed max_lat=34 clipped Baghdad / northern Iraq jam radii.
+    Bounds always expand from the PSAB theater floor so southern approaches
+    remain in frame. Extra padding past the jam radius keeps the outer green
+    ring fully inside the lattice so discs read as surrounding arcs instead of
+    a hard northern clip line.
+    """
+    base = dict(floor or DEFAULT_FIELD_BOUNDS)
+    if not threats:
+        return base
+
+    min_lat = base["min_lat"]
+    max_lat = base["max_lat"]
+    min_lon = base["min_lon"]
+    max_lon = base["max_lon"]
+
+    for th in threats:
+        radius = float(th.jam_radius_nmi or 100.0) + padding_nmi
+        # Degrees: 1° lat ≈ 60 nmi; lon shrinks by cos(lat).
+        dlat = radius / 60.0
+        cos_lat = max(0.35, math.cos(math.radians(th.location.lat)))
+        dlon = radius / (60.0 * cos_lat)
+        min_lat = min(min_lat, th.location.lat - dlat)
+        max_lat = max(max_lat, th.location.lat + dlat)
+        min_lon = min(min_lon, th.location.lon - dlon)
+        max_lon = max(max_lon, th.location.lon + dlon)
+
+    return {
+        "min_lat": round(min_lat, 4),
+        "max_lat": round(max_lat, 4),
+        "min_lon": round(min_lon, 4),
+        "max_lon": round(max_lon, 4),
+    }
+
+
 def build_hex_costgrid(
     threats: list[Threat],
     *,
-    min_lat: float = 23.5,
-    max_lat: float = 34.0,
-    min_lon: float = 43.5,
-    max_lon: float = 51.5,
+    min_lat: Optional[float] = None,
+    max_lat: Optional[float] = None,
+    min_lon: Optional[float] = None,
+    max_lon: Optional[float] = None,
     cell_nmi: float = 45.0,
     cell_style: str = "hex",
     altitude_ft: Optional[float] = None,
+    frequency_band: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Coarse lattice of cost cells (performant hex or square).
@@ -88,12 +167,39 @@ def build_hex_costgrid(
     Intensity per cell = max overlapping threat contribution
     (severity weight × falloff inside jam radius). Documented choice: max, not sum.
 
+    Bounds default to every active threat's jam disc so northern Iraq weather
+    is not clipped. ``frequency_band`` selects one RF band; omit / ``all`` for
+    the composite all-up overlay.
+
     altitude_ft is display-contract metadata only until stacked layers exist;
     the 2-D field does not yet vary by altitude.
     """
     style = (cell_style or "hex").lower()
     if style not in ("hex", "square"):
         style = "hex"
+
+    all_bands = available_frequency_bands(threats)
+    band_filter = _normalize_frequency_band(frequency_band)
+    active = filter_threats_by_frequency_band(threats, band_filter)
+
+    explicit = None not in (min_lat, max_lat, min_lon, max_lon)
+    if explicit:
+        bounds = {
+            "min_lat": float(min_lat),
+            "max_lat": float(max_lat),
+            "min_lon": float(min_lon),
+            "max_lon": float(max_lon),
+        }
+    else:
+        # Bounds from the full threat set so switching bands does not jump the
+        # theater frame; intensity still uses only the active band.
+        bounds = field_bounds_for_threats(threats)
+
+    min_lat_v = bounds["min_lat"]
+    max_lat_v = bounds["max_lat"]
+    min_lon_v = bounds["min_lon"]
+    max_lon_v = bounds["max_lon"]
+
     # The operator-facing cell-size control stays as selected. Rendering
     # samples the same supplier formula on a half-pitch lattice so adjacent
     # covered cells form continuous regional zones at demo scale.
@@ -101,18 +207,18 @@ def build_hex_costgrid(
     # Approximate degrees per nmi
     dlat = render_cell_nmi / 60.0
     dlon = render_cell_nmi / (
-        60.0 * max(0.5, math.cos(math.radians((min_lat + max_lat) / 2)))
+        60.0 * max(0.5, math.cos(math.radians((min_lat_v + max_lat_v) / 2)))
     )
     cells: list[dict[str, Any]] = []
     row = 0
-    lat = min_lat
+    lat = min_lat_v
     lat_step = dlat
-    while lat <= max_lat:
-        lon0 = min_lon + (0.5 * dlon if (style == "hex" and row % 2) else 0.0)
+    while lat <= max_lat_v:
+        lon0 = min_lon_v + (0.5 * dlon if (style == "hex" and row % 2) else 0.0)
         lon = lon0
-        while lon <= max_lon:
+        while lon <= max_lon_v:
             intensity = 0.0
-            for th in threats:
+            for th in active:
                 d = _haversine_nmi(lat, lon, th.location.lat, th.location.lon)
                 radius = float(th.jam_radius_nmi or 100.0)
                 if d > radius:
@@ -154,6 +260,15 @@ def build_hex_costgrid(
         "sees_mode_note": (
             "Cost field uses jam-radius soft falloff × severity weight; "
             "pairs with ROUTE_SUPPLIER=costgrid pathing but does not change geometry alone."
+        ),
+        "frequency_band": band_filter or "all",
+        "available_frequency_bands": all_bands,
+        "threat_count": len(active),
+        "threat_count_all": len(threats),
+        "bounds": bounds,
+        "bounds_note": (
+            "Field bounds expand to enclose every threat jam disc so weather "
+            "is not clipped in northern Iraq / Mosul."
         ),
         "levels": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
         "color_ramp": {

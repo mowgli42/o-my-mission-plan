@@ -83,6 +83,44 @@ SEVERITY_BY_STATUS = {
     "offline": "LOW",
 }
 
+# Default RF frequency band when the region fixture omits attributes.band.
+# Frequency band is an RF band only — never a task or platform type.
+BAND_BY_CATEGORY = {
+    "sam_site": "S-band",
+    "surveillance_radar": "S-band",
+    "early_warning_radar": "UHF",
+    "elint_site": "X-band",
+    "ballistic_missile_site": "S-band",
+    "coastal_defense": "X-band",
+    "command_post": "S-band",
+}
+
+# Common ELNOT → RF band hints for demo EOB rows that lack an explicit band.
+BAND_BY_ELNOT = {
+    "SA6": "C-band",
+    "SA2": "S-band",
+    "SA3": "S-band",
+    "SA5": "L-band",
+    "SA8": "X-band",
+    "SA10": "S-band",
+    "SA11": "X-band",
+    "SA15": "X-band",
+    "SA17": "X-band",
+    "SA20": "S-band",
+    "SA21": "S-band",
+}
+
+
+def infer_frequency_band(attrs: dict[str, Any], category: str) -> str:
+    """Resolve RF frequency band from explicit attrs, ELNOT, or category default."""
+    explicit = str(attrs.get("band") or attrs.get("frequency_band") or "").strip()
+    if explicit:
+        return explicit
+    elnot = str(attrs.get("elnot") or "").strip().upper()
+    if elnot in BAND_BY_ELNOT:
+        return BAND_BY_ELNOT[elnot]
+    return BAND_BY_CATEGORY.get(category, "S-band")
+
 
 @dataclass
 class FixedThreat:
@@ -163,7 +201,7 @@ def threats_from_region(
                 category=cat,
                 analyzed_at=str(raw.get("analyzed_at") or ""),
                 range_km=float(attrs.get("range_km") or 0),
-                frequency_band=str(attrs.get("band") or ""),
+                frequency_band=infer_frequency_band(attrs, cat),
                 status=str(attrs.get("status") or ""),
                 attributes=attrs,
             )

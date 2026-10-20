@@ -47,6 +47,19 @@ class Task(BaseModel):
     target_type: Optional[str] = None
 
 
+class JamSupport(BaseModel):
+    """Onboard electronic-attack / self-protection jammer capability.
+
+    ``frequency_band`` is the RF band the jammer covers (same sense as
+    ``Threat.frequency_band``), never a task or platform type.
+    """
+
+    id: str
+    label: str
+    frequency_band: str = ""
+    role: str = "self-protection"  # self-protection | escort | standoff
+
+
 class Aircraft(BaseModel):
     id: str
     type: AircraftType
@@ -58,6 +71,10 @@ class Aircraft(BaseModel):
     weapons_loadout: int = Field(
         0,
         description="Air-to-ground / strike weapons count available at launch (0 for ISR)",
+    )
+    jam_support: list[JamSupport] = Field(
+        default_factory=list,
+        description="Onboard jammer packages this aircraft carries",
     )
 
 

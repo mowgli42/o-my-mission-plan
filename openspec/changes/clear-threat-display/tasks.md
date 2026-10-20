@@ -33,7 +33,19 @@
 - [x] Terminology: `frequency_band` is RF-only; route impact API/UI fields use exposure (clear / jammed / lethal), not Strike/ISR/platform “bands”
 - [x] Gherkin + design notes updated for continuous field, point-level exposure, and band terminology
 
+## Phase 6 — Details Impact timeline correction
+- [x] Impact rail uses `weather_impact` (cost-field intensity ramp), not per-threat clear/jammed/lethal teal wash
+- [x] Onboard / Offboard jam-support rails list jammer packages with RF frequency band
+- [x] Gherkin + design notes + screenshot 05 updated
+
+## Phase 7 — Threat data bounds + RF band filter
+- [x] Cost-field bounds expand from each threat jam disc (no Iraq clip at lat 34)
+- [x] Region ingest / fixture fills missing frequency bands (ELNOT / category defaults)
+- [x] All-up vs per-band weather selector; threat points filtered with the field
+- [x] Gherkin + design notes updated
+
 ## Verification
 - [x] Manual check against current screenshots: no muddy overlap, no disconnected hex field, no whole-leg wash
+- [x] Details Impact rail shows green→yellow→orange→red matching Plan weather under the route
 - [x] Gherkin scenarios tracked (UI automation pending; API/UI control tests cover contract)
 - [x] Performance remains acceptable with demo threat set (~205 rendered cost cells at default settings; 67 tests pass)

@@ -31,6 +31,7 @@ const state = {
   cellNmi: 45,
   cellStyle: "hex",
   altitudeFt: 10000,
+  frequencyBand: "all",
   legendFilter: null,
   routeExposureMode: true,
 };
@@ -48,7 +49,8 @@ const EXPOSURE_STROKE = {
   LETHAL: "#ff5c6c",
 };
 
-const BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
+const DEFAULT_BOUNDS = { minLat: 23.5, maxLat: 34.0, minLon: 43.5, maxLon: 51.5 };
+let BOUNDS = { ...DEFAULT_BOUNDS };
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
@@ -559,6 +561,9 @@ function renderMap(mapSel = "#map", opts = {}) {
 
   const activeThreatId = state.hoveredThreatId || state.selectedThreatId;
   for (const th of w.threats || []) {
+    // RF band filter: hide emitters that are not in the selected frequency band
+    // so the operator can see which threats the weather overlay represents.
+    if (!threatMatchesFrequencyBand(th)) continue;
     const loc = th.location || th;
     const lat = loc.lat ?? th.latitude;
     const lon = loc.lon ?? th.longitude;
@@ -574,8 +579,9 @@ function renderMap(mapSel = "#map", opts = {}) {
         <circle cx="${x}" cy="${y}" r="${lethR}" fill="none" stroke="#ef4444" stroke-width="1.4"/></g>`);
     }
     if (showThreatPoints) {
-      markerParts.push(`<g class="threat-g" data-threat="${th.id}"><circle cx="${x}" cy="${y}" r="${isActive ? 6 : 5}" fill="#ef4444"/></g>`);
-      labelParts.push(`<text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}</text>`);
+      const bandLabel = th.frequency_band ? ` · ${th.frequency_band}` : "";
+      markerParts.push(`<g class="threat-g" data-threat="${th.id}" data-band="${th.frequency_band || ""}"><circle cx="${x}" cy="${y}" r="${isActive ? 6 : 5}" fill="#ef4444"/></g>`);
+      labelParts.push(`<text x="${x + 8}" y="${y + 3}" fill="#ef4444" font-size="8" font-family="IBM Plex Mono, monospace">${th.id}${bandLabel}</text>`);
     }
   }
 
@@ -1053,17 +1059,32 @@ function renderDetailTasks(route) {
     .join("");
 }
 
+function jamSupportMarks(entries, total) {
+  if (!total || !entries?.length) return "";
+  return entries
+    .map((e) => {
+      const left = (e.from_nmi / total) * 100;
+      const width = Math.max(((e.to_nmi - e.from_nmi) / total) * 100, 1.5);
+      const band = e.frequency_band || "RF —";
+      const who = e.provider_callsign || e.provider_aircraft_id || "";
+      return `<span class="jam-mark jam-${e.source}" style="left:${left}%;width:${width}%" title="${e.label} · ${e.role} · frequency band ${band}${who ? ` · ${who}` : ""}">${e.label}</span>`;
+    })
+    .join("");
+}
+
 function renderSegmentTimeline(route) {
   const host = $("#detail-segment-timeline");
   const activeId = state.hoveredThreatId || state.selectedThreatId;
   const prim =
     (route.threats || []).find((t) => t.threat_id === activeId) || route.primary_threat;
-  const segs = prim?.segments || [];
-  const total = route.total_distance_nmi || 0;
+  const weather = route.weather_impact || {};
+  const weatherSegs = weather.segments || [];
+  const jam = route.jam_support || {};
+  const total = route.total_distance_nmi || weather.total_distance_nmi || 0;
   const tasks = route.tasks || [];
   const cum = prim?.cumulative_nmi || [0];
   const closestPct =
-    total && cum.length
+    total && cum.length && prim
       ? (((cum[prim.closest_index] || 0) + (cum[prim.closest_index + 1] || 0)) / 2 / total) * 100
       : 0;
 
@@ -1077,28 +1098,57 @@ function renderSegmentTimeline(route) {
     })
     .join("");
 
+  const peak = weather.peak_level || "CLEAR";
+  const peakNote =
+    peak === "CLEAR"
+      ? "clear of threat weather"
+      : `peak weather ${String(peak).toLowerCase()}`;
+  const primNote = prim
+    ? ` · selected ${prim.threat_id} exposure ${String(prim.exposure || "").toLowerCase()} · frequency band ${prim.frequency_band || "—"}`
+    : "";
+
+  const impactHtml = weatherSegs.length
+    ? weatherSegs
+        .map(
+          (s) =>
+            `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="${s.from_nmi}–${s.to_nmi} nm · weather ${String(s.level || "").toLowerCase()} · intensity ${s.intensity}"></span>`,
+        )
+        .join("")
+    : `<span class="seg" style="flex:1;background:#1e293b"></span>`;
+
+  const onboardJam = jamSupportMarks(jam.onboard, total);
+  const offboardJam = jamSupportMarks(jam.offboard, total);
+
   host.innerHTML = `
     <h3>Route timeline · ${route.route_name}</h3>
-    <p class="hint">${prim ? `${prim.threat_id} closest ${prim.closest_approach_nm.toFixed(1)} nm · exposure ${String(prim.exposure || "").toLowerCase()} · frequency band ${prim.frequency_band || "—"} · ${prim.severity}` : "Clear of threat coverage"} · distance axis · only impacted sub-segments are jammed/lethal</p>
+    <p class="hint">Impact = route colour through the threat-weather cost field (${peakNote})${primNote} · distance axis</p>
     <div class="seg-tracks">
       <div class="seg-label">Impact</div>
-      <div class="seg-line">
-        ${
-          segs.length
-            ? segs
-                .map(
-                  (s) =>
-                    `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="Sub-segment ${s.index + 1} · ${s.closest_nm} nm · exposure ${String(s.exposure || "").toLowerCase()}"></span>`,
-                )
-                .join("")
-            : `<span class="seg" style="flex:1;background:#64748b"></span>`
-        }
+      <div class="seg-line weather-impact">
+        ${impactHtml}
         ${prim ? `<span class="threat-mark" style="left:${closestPct}%">▼</span>` : ""}
       </div>
       <div class="seg-label">Onboard</div>
-      <div class="task-rail"><div class="rail"></div>${taskMarks}</div>
+      <div class="task-rail jam-rail">
+        <div class="rail"></div>
+        ${taskMarks}
+        ${onboardJam || `<span class="jam-empty">No onboard jam support</span>`}
+      </div>
+      <div class="seg-label">Offboard</div>
+      <div class="task-rail jam-rail">
+        <div class="rail"></div>
+        ${offboardJam || `<span class="jam-empty">No offboard jam support</span>`}
+      </div>
       <div class="seg-label"></div>
       <div class="seg-axis"><span>0 nm</span><span>${total.toFixed(0)} nm</span></div>
+    </div>
+    <div class="weather-ramp-legend" aria-label="Weather impact colour ramp">
+      <span><i style="background:#1e293b"></i>Clear</span>
+      <span><i style="background:#2ecc71"></i>Low</span>
+      <span><i style="background:#f1c40f"></i>Medium</span>
+      <span><i style="background:#e67e22"></i>High</span>
+      <span><i style="background:#e74c3c"></i>Critical</span>
+      <span class="hint">same ramp as Plan cost field</span>
     </div>
   `;
 }
@@ -1150,14 +1200,69 @@ function archetypeLabel(a) {
   return map[a] || a || "—";
 }
 
+function applyFieldBounds(bounds) {
+  if (!bounds) return;
+  const next = {
+    minLat: Number(bounds.min_lat ?? bounds.minLat),
+    maxLat: Number(bounds.max_lat ?? bounds.maxLat),
+    minLon: Number(bounds.min_lon ?? bounds.minLon),
+    maxLon: Number(bounds.max_lon ?? bounds.maxLon),
+  };
+  if (
+    ![next.minLat, next.maxLat, next.minLon, next.maxLon].every(Number.isFinite) ||
+    next.maxLat <= next.minLat ||
+    next.maxLon <= next.minLon
+  ) {
+    return;
+  }
+  BOUNDS = next;
+  // Keep Leaflet theater fit in sync with threat-expanded weather bounds.
+  THEATER_BOUNDS[0][0] = next.minLat;
+  THEATER_BOUNDS[0][1] = next.minLon;
+  THEATER_BOUNDS[1][0] = next.maxLat;
+  THEATER_BOUNDS[1][1] = next.maxLon;
+}
+
+function populateFrequencyBandSelect(bands) {
+  const sel = $("#sel-frequency-band");
+  if (!sel) return;
+  const list = Array.isArray(bands) ? bands.filter(Boolean) : [];
+  const current = state.frequencyBand || "all";
+  sel.innerHTML =
+    `<option value="all">All bands</option>` +
+    list.map((b) => `<option value="${b}">${b}</option>`).join("");
+  sel.value = list.includes(current) || current === "all" ? current : "all";
+  state.frequencyBand = sel.value;
+  updateCostLegendBand();
+}
+
+function updateCostLegendBand() {
+  const head = document.querySelector("#cost-legend .cost-legend-head");
+  if (!head) return;
+  const band = state.frequencyBand || "all";
+  const bandNote = band === "all" ? "all RF bands" : band;
+  head.innerHTML = `Threat weather · aggregation = <strong>max</strong> · <strong>${bandNote}</strong>`;
+}
+
+function threatMatchesFrequencyBand(th) {
+  const band = state.frequencyBand;
+  if (!band || band === "all") return true;
+  return String(th?.frequency_band || "").trim() === band;
+}
+
 async function loadCostgrid(force = false) {
   if (!force && !state.showCostgrid) return;
   const q = new URLSearchParams({
     cell_nmi: String(state.cellNmi || 45),
     cell_style: state.cellStyle || "hex",
     altitude_ft: String(state.altitudeFt || 10000),
+    frequency_band: state.frequencyBand || "all",
   });
   state.costgrid = await api(`/api/map/costgrid?${q}`);
+  if (state.costgrid?.available_frequency_bands) {
+    populateFrequencyBandSelect(state.costgrid.available_frequency_bands);
+  }
+  if (state.costgrid?.bounds) applyFieldBounds(state.costgrid.bounds);
 }
 
 async function loadExposure() {
@@ -1453,6 +1558,8 @@ async function loadWorld() {
   }
   state.groupByType = state.world.platform_group_by_type !== false;
   if ($("#tog-group-type")) $("#tog-group-type").checked = state.groupByType;
+  populateFrequencyBandSelect(state.world.available_frequency_bands || []);
+  if (state.world.field_bounds) applyFieldBounds(state.world.field_bounds);
   renderTasks();
   renderFleet();
   renderStats();
@@ -1623,6 +1730,17 @@ function wire() {
     state.altitudeFt = Number(e.target.value) || 10000;
     if (state.showCostgrid || state.costgrid) await loadCostgrid(true);
     toast(`Altitude ${state.altitudeFt} ft (display-only until stacked layers)`, "info");
+    refreshMap();
+  });
+  $("#sel-frequency-band")?.addEventListener("change", async (e) => {
+    state.frequencyBand = e.target.value || "all";
+    if (state.showCostgrid || state.costgrid) await loadCostgrid(true);
+    const bandLabel =
+      state.frequencyBand === "all"
+        ? "all-up weather (every RF band)"
+        : `${state.frequencyBand} emitters only`;
+    toast(`Threat weather · ${bandLabel}`, "info");
+    updateCostLegendBand();
     refreshMap();
   });
   $$("#cost-legend .cost-level").forEach((btn) => {

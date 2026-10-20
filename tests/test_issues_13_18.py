@@ -115,6 +115,27 @@ def test_costgrid_and_exposure_and_timeline_apis():
 
     assert cg["tiling"] == "edge-to-edge"
     assert cg["render_cell_nmi"] == cg["cell_nmi"] / 2
+    # Jam discs (e.g. Baghdad SAM) must not be clipped at the old max_lat=34.
+    assert cg["bounds"]["max_lat"] > 34.0
+    assert "available_frequency_bands" in cg
+    assert cg["frequency_band"] == "all"
+    assert cg["threat_count"] == cg["threat_count_all"]
+
+    bands = cg["available_frequency_bands"]
+    assert bands
+    sample_band = bands[0]
+    filtered = client.get(f"/api/map/costgrid?frequency_band={sample_band}").json()
+    assert filtered["frequency_band"] == sample_band
+    assert filtered["threat_count"] <= filtered["threat_count_all"]
+    assert filtered["threat_count"] >= 1
+    # Band filter changes which emitters contribute; cell set should differ
+    # from the all-up overlay for a multi-band theater.
+    if len(bands) > 1:
+        assert filtered["cell_count"] != cg["cell_count"] or filtered["threat_count"] < cg["threat_count"]
+
+    world = client.get("/api/world").json()
+    assert world["available_frequency_bands"]
+    assert world["field_bounds"]["max_lat"] > 34.0
 
     bad = client.get("/api/map/costgrid?cell_style=triangle")
     assert bad.status_code == 400
@@ -153,6 +174,22 @@ def test_costgrid_and_exposure_and_timeline_apis():
     assert all("band" not in t for t in threat_rows)
     assert any(t["exposure_spans"] for t in threat_rows)
     assert any(t["impacted_points"] for t in threat_rows)
+
+    weather_routes = [r for r in overview["routes"] if r.get("weather_impact", {}).get("segments")]
+    assert weather_routes
+    for r in weather_routes:
+        wi = r["weather_impact"]
+        assert wi["color_ramp"]["LOW"] == "#2ecc71"
+        assert wi["color_ramp"]["CRITICAL"] == "#e74c3c"
+        assert wi["peak_level"] in {"CLEAR", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+        levels = {s["level"] for s in wi["segments"]}
+        # Must show weather colours, not only exposure teal.
+        assert levels - {"CLEAR"}
+        assert all(s["color"] == wi["color_ramp"][s["level"]] for s in wi["segments"])
+        jam = r["jam_support"]
+        assert "onboard" in jam and "offboard" in jam
+    assert any(r["jam_support"]["has_onboard"] for r in weather_routes)
+    assert any(r["jam_support"]["has_offboard"] for r in weather_routes)
 
     tl = client.get("/api/timeline").json()
     assert "tracks" in tl
@@ -195,3 +232,9 @@ def test_ui_has_new_controls():
     assert "exposure-point" in js
     assert "frequency band" in js
     assert "aggregation = <strong>max</strong>" in html
+    assert "weather_impact" in js or "weather-impact" in js
+    assert "jam-mark" in js
+    assert "Offboard" in js
+    assert "sel-frequency-band" in html
+    assert "frequency_band" in js
+    assert "threatMatchesFrequencyBand" in js
