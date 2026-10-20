@@ -154,6 +154,22 @@ def test_costgrid_and_exposure_and_timeline_apis():
     assert any(t["exposure_spans"] for t in threat_rows)
     assert any(t["impacted_points"] for t in threat_rows)
 
+    weather_routes = [r for r in overview["routes"] if r.get("weather_impact", {}).get("segments")]
+    assert weather_routes
+    for r in weather_routes:
+        wi = r["weather_impact"]
+        assert wi["color_ramp"]["LOW"] == "#2ecc71"
+        assert wi["color_ramp"]["CRITICAL"] == "#e74c3c"
+        assert wi["peak_level"] in {"CLEAR", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+        levels = {s["level"] for s in wi["segments"]}
+        # Must show weather colours, not only exposure teal.
+        assert levels - {"CLEAR"}
+        assert all(s["color"] == wi["color_ramp"][s["level"]] for s in wi["segments"])
+        jam = r["jam_support"]
+        assert "onboard" in jam and "offboard" in jam
+    assert any(r["jam_support"]["has_onboard"] for r in weather_routes)
+    assert any(r["jam_support"]["has_offboard"] for r in weather_routes)
+
     tl = client.get("/api/timeline").json()
     assert "tracks" in tl
     assert tl["axis_max_minutes"] >= 0
@@ -195,3 +211,6 @@ def test_ui_has_new_controls():
     assert "exposure-point" in js
     assert "frequency band" in js
     assert "aggregation = <strong>max</strong>" in html
+    assert "weather_impact" in js or "weather-impact" in js
+    assert "jam-mark" in js
+    assert "Offboard" in js

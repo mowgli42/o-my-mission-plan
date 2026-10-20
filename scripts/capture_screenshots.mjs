@@ -137,10 +137,13 @@ await page.click('.subtab[data-routes-pane="timeline"]');
 await page.waitForTimeout(800);
 await shot("04-aligned-timeline");
 
-// 05 — Details drawer: route-exposure focus + inset theater field
+// 05 — Details drawer: route-exposure focus + weather Impact rail + jam rails
 await page.click('.subtab[data-routes-pane="table"]');
 await page.waitForTimeout(300);
-await page.locator("#routes-tbody tr[data-route]").first().click();
+// Prefer a deep-threat route so Impact shows green→yellow→orange→red.
+const deepThreat = page.locator("#routes-tbody tr[data-route]").filter({ hasText: "Viper-3" });
+if (await deepThreat.count()) await deepThreat.first().click();
+else await page.locator("#routes-tbody tr[data-route]").first().click();
 await page.waitForTimeout(400);
 await page.click("#btn-more-details");
 await page.waitForSelector("#details-drawer:not([hidden])");

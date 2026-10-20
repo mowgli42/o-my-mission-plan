@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from .geo import haversine_nmi
+from .map_layers import SEVERITY_WEIGHT, _level_for_intensity
 from .models import Aircraft, LatLon, Route, Task, TaskType, Threat, Waypoint
 from .planning import PlanCycleResult, PlannedAircraft
 
@@ -20,6 +21,15 @@ from .planning import PlanCycleResult, PlannedAircraft
 CRUISE_KT = 420.0
 
 _EXPOSURE_RANK = {"CLEAR": 0, "JAMMED": 1, "LETHAL": 2}
+
+# Same intensity ramp colours as the Plan-tab cost field (COST_RAMP / color_ramp).
+WEATHER_COLOR_RAMP = {
+    "CLEAR": "#1e293b",
+    "LOW": "#2ecc71",
+    "MEDIUM": "#f1c40f",
+    "HIGH": "#e67e22",
+    "CRITICAL": "#e74c3c",
+}
 
 
 def exposure_for_distance(
@@ -170,6 +180,189 @@ def build_impact_segments(
             else "CLEAR"
         ),
         "frequency_band": threat.frequency_band,
+    }
+
+
+def _point_intensity(lat: float, lon: float, threats: list[Threat]) -> float:
+    """Max threat contribution at a lat/lon — same formula as cost-grid cells."""
+    intensity = 0.0
+    for th in threats:
+        d = haversine_nmi(LatLon(lat=lat, lon=lon), th.location)
+        radius = float(th.jam_radius_nmi or 100.0)
+        if d > radius:
+            continue
+        w = SEVERITY_WEIGHT.get((th.severity or "MEDIUM").upper(), 2.0)
+        contrib = w * (1.0 - d / radius)
+        if contrib > intensity:
+            intensity = contrib
+    return intensity
+
+
+def build_route_weather_impact(
+    waypoints: list[Waypoint],
+    threats: list[Threat],
+    *,
+    sample_step_nmi: float = 8.0,
+) -> dict[str, Any]:
+    """Weather-intensity profile of a route through the cost field.
+
+    Samples the route at roughly ``sample_step_nmi`` and colours each slice
+    with the same green → yellow → orange → red ramp as the Plan cost field,
+    so the details Impact rail matches what the operator sees under the route
+    on the map. Adjacent samples with the same level are merged for a readable
+    timeline (avoids hundreds of sub-pixel segments washing to a single colour).
+    """
+    if len(waypoints) < 2:
+        return {
+            "segments": [],
+            "total_distance_nmi": 0.0,
+            "peak_level": "CLEAR",
+            "peak_intensity": 0.0,
+            "color_ramp": dict(WEATHER_COLOR_RAMP),
+        }
+
+    raw: list[dict[str, Any]] = []
+    cum = 0.0
+    for i in range(len(waypoints) - 1):
+        a, b = waypoints[i], waypoints[i + 1]
+        length = haversine_nmi(a.location, b.location)
+        if length <= 0:
+            continue
+        sample_count = max(1, int(round(length / sample_step_nmi)))
+        step = length / sample_count
+        for j in range(sample_count):
+            mid = _point_at(a.location, b.location, (j + 0.5) / sample_count)
+            intensity = _point_intensity(mid.lat, mid.lon, threats)
+            level = _level_for_intensity(intensity) if intensity > 0 else "CLEAR"
+            raw.append(
+                {
+                    "from_nmi": round(cum + j * step, 2),
+                    "to_nmi": round(cum + (j + 1) * step, 2),
+                    "length_nmi": round(step, 2),
+                    "intensity": round(intensity, 3),
+                    "level": level,
+                    "color": WEATHER_COLOR_RAMP.get(level, WEATHER_COLOR_RAMP["CLEAR"]),
+                    "leg_index": i,
+                }
+            )
+        cum += length
+
+    # Merge adjacent same-level samples into readable spans.
+    segments: list[dict[str, Any]] = []
+    for seg in raw:
+        if (
+            segments
+            and segments[-1]["level"] == seg["level"]
+            and abs(segments[-1]["to_nmi"] - seg["from_nmi"]) < 1e-6
+        ):
+            segments[-1]["to_nmi"] = seg["to_nmi"]
+            segments[-1]["length_nmi"] = round(
+                segments[-1]["to_nmi"] - segments[-1]["from_nmi"], 2
+            )
+            segments[-1]["intensity"] = max(segments[-1]["intensity"], seg["intensity"])
+            continue
+        segments.append(dict(seg))
+
+    peak_intensity = max((s["intensity"] for s in segments), default=0.0)
+    peak_level = (
+        _level_for_intensity(peak_intensity) if peak_intensity > 0 else "CLEAR"
+    )
+    return {
+        "segments": segments,
+        "total_distance_nmi": round(cum, 2),
+        "peak_level": peak_level,
+        "peak_intensity": round(peak_intensity, 3),
+        "color_ramp": dict(WEATHER_COLOR_RAMP),
+        "aggregation": "max",
+        "note": (
+            "Impact colours match the Plan cost-field intensity ramp "
+            "(severity weight × jam-radius falloff, max aggregation)."
+        ),
+    }
+
+
+def _weather_windows(weather: dict[str, Any]) -> list[tuple[float, float]]:
+    """Contiguous distance ranges where weather intensity is above CLEAR."""
+    windows: list[tuple[float, float]] = []
+    for seg in weather.get("segments") or []:
+        if seg.get("level") == "CLEAR":
+            continue
+        if windows and abs(windows[-1][1] - seg["from_nmi"]) < 1e-6:
+            windows[-1] = (windows[-1][0], seg["to_nmi"])
+        else:
+            windows.append((seg["from_nmi"], seg["to_nmi"]))
+    return windows
+
+
+def build_jam_support_timelines(
+    *,
+    aircraft: Aircraft,
+    weather: dict[str, Any],
+    fleet: list[Aircraft],
+    total_distance_nmi: float,
+) -> dict[str, Any]:
+    """Onboard and offboard jam-support windows along the route distance axis.
+
+    Onboard: this aircraft's own jammer packages, active across weather windows
+    (or the whole route when it carries self-protection).
+    Offboard: escort/standoff packages other fleet aircraft can provide into
+    those same weather windows (demo assignment — matching RF band preferred).
+    """
+    windows = _weather_windows(weather)
+    if not windows and total_distance_nmi > 0:
+        # Still show continuous self-protection when the route is clear.
+        windows = []
+
+    onboard: list[dict[str, Any]] = []
+    for pkg in aircraft.jam_support:
+        spans = windows or ([(0.0, total_distance_nmi)] if total_distance_nmi > 0 else [])
+        for start, end in spans:
+            onboard.append(
+                {
+                    "id": pkg.id,
+                    "label": pkg.label,
+                    "frequency_band": pkg.frequency_band,
+                    "role": pkg.role,
+                    "source": "onboard",
+                    "provider_aircraft_id": aircraft.id,
+                    "provider_callsign": aircraft.label or aircraft.id,
+                    "from_nmi": round(start, 2),
+                    "to_nmi": round(end, 2),
+                    "length_nmi": round(end - start, 2),
+                }
+            )
+
+    offboard: list[dict[str, Any]] = []
+    if windows:
+        donors = [
+            (other, pkg)
+            for other in fleet
+            if other.id != aircraft.id
+            for pkg in other.jam_support
+            if pkg.role in ("escort", "standoff")
+        ]
+        for start, end in windows:
+            for other, pkg in donors:
+                offboard.append(
+                    {
+                        "id": f"{pkg.id}@{aircraft.id}",
+                        "label": pkg.label,
+                        "frequency_band": pkg.frequency_band,
+                        "role": pkg.role,
+                        "source": "offboard",
+                        "provider_aircraft_id": other.id,
+                        "provider_callsign": other.label or other.id,
+                        "from_nmi": round(start, 2),
+                        "to_nmi": round(end, 2),
+                        "length_nmi": round(end - start, 2),
+                    }
+                )
+
+    return {
+        "onboard": onboard,
+        "offboard": offboard,
+        "has_onboard": bool(onboard),
+        "has_offboard": bool(offboard),
     }
 
 
@@ -411,6 +604,13 @@ def build_routes_overview(
         threat_rows = assess_route_threats(p.route, threats)
         primary = threat_rows[0] if threat_rows else None
         timeline = build_timeline_events(p, tasks_by_id)
+        weather = build_route_weather_impact(p.route.waypoints, threats)
+        jam = build_jam_support_timelines(
+            aircraft=ac,
+            weather=weather,
+            fleet=aircraft,
+            total_distance_nmi=float(p.route.total_distance_nmi or 0.0),
+        )
 
         routes_out.append(
             {
@@ -456,6 +656,8 @@ def build_routes_overview(
                 "fuel": p.fuel.model_dump() if p.fuel else None,
                 "threats": threat_rows,
                 "primary_threat": primary,
+                "weather_impact": weather,
+                "jam_support": jam,
                 "timeline_events": timeline,
                 "tasks": [
                     {

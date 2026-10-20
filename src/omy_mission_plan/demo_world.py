@@ -12,6 +12,7 @@ from .models import (
     Airbase,
     Aircraft,
     AircraftType,
+    JamSupport,
     LatLon,
     Navaid,
     Task,
@@ -178,6 +179,20 @@ AIRCRAFT: list[Aircraft] = [
         reserve_fuel=2500.0,
         label="Viper-1",
         weapons_loadout=4,
+        jam_support=[
+            JamSupport(
+                id="ECM-V1",
+                label="Viper-1 ALQ self-protection",
+                frequency_band="X-band",
+                role="self-protection",
+            ),
+            JamSupport(
+                id="ECM-V1-ESCORT",
+                label="Viper-1 escort jam",
+                frequency_band="S-band",
+                role="escort",
+            ),
+        ],
     ),
     Aircraft(
         id="FTR-2",
@@ -188,6 +203,14 @@ AIRCRAFT: list[Aircraft] = [
         reserve_fuel=2500.0,
         label="Viper-2",
         weapons_loadout=4,
+        jam_support=[
+            JamSupport(
+                id="ECM-V2",
+                label="Viper-2 ALQ self-protection",
+                frequency_band="X-band",
+                role="self-protection",
+            ),
+        ],
     ),
     Aircraft(
         id="FTR-3",
@@ -198,6 +221,20 @@ AIRCRAFT: list[Aircraft] = [
         reserve_fuel=2400.0,
         label="Viper-3",
         weapons_loadout=4,
+        jam_support=[
+            JamSupport(
+                id="ECM-V3",
+                label="Viper-3 ALQ self-protection",
+                frequency_band="S-band",
+                role="self-protection",
+            ),
+            JamSupport(
+                id="ECM-V3-STANDOFF",
+                label="Viper-3 standoff jam",
+                frequency_band="S-band",
+                role="standoff",
+            ),
+        ],
     ),
     Aircraft(
         id="BMB-1",
@@ -208,6 +245,14 @@ AIRCRAFT: list[Aircraft] = [
         reserve_fuel=5000.0,
         label="Buff-1",
         weapons_loadout=12,
+        jam_support=[
+            JamSupport(
+                id="ECM-B1",
+                label="Buff-1 defensive ECM",
+                frequency_band="S-band",
+                role="self-protection",
+            ),
+        ],
     ),
     Aircraft(
         id="BMB-2",

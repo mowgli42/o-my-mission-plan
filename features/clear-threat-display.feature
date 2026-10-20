@@ -56,3 +56,18 @@ Feature: Clear threat weather displays
     Then a persistent legend explains the intensity ramp and the clear, jammed, and lethal exposure states
     And the legend states that frequency band is a threat or jammer RF band shown separately from exposure
     And aggregation rule (max overlapping contribution) is noted
+
+  Scenario: Details Impact timeline matches route colour through the weather field
+    Given a selected aircraft route in the details view
+    When the route timeline is shown
+    Then the Impact rail is coloured with the same green to yellow to orange to red intensity ramp as the Plan cost field under the route
+    And clear stretches of the route remain the clear (dark) weather colour rather than an exposure teal wash
+    And jam and lethal exposure language stays on the map marks and side panel, not as the Impact rail encoding
+
+  Scenario: Onboard and offboard jam support appear on the route timeline
+    Given a selected aircraft route in the details view
+    And the aircraft or fleet carries jammer packages
+    When the route timeline is shown
+    Then onboard jam support packages are listed on the Onboard rail with their RF frequency band
+    And offboard escort or standoff jam support from other platforms is listed on the Offboard rail when available
+    And empty rails state that no jam support is assigned rather than implying exposure colouring

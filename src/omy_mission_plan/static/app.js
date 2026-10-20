@@ -1053,17 +1053,32 @@ function renderDetailTasks(route) {
     .join("");
 }
 
+function jamSupportMarks(entries, total) {
+  if (!total || !entries?.length) return "";
+  return entries
+    .map((e) => {
+      const left = (e.from_nmi / total) * 100;
+      const width = Math.max(((e.to_nmi - e.from_nmi) / total) * 100, 1.5);
+      const band = e.frequency_band || "RF —";
+      const who = e.provider_callsign || e.provider_aircraft_id || "";
+      return `<span class="jam-mark jam-${e.source}" style="left:${left}%;width:${width}%" title="${e.label} · ${e.role} · frequency band ${band}${who ? ` · ${who}` : ""}">${e.label}</span>`;
+    })
+    .join("");
+}
+
 function renderSegmentTimeline(route) {
   const host = $("#detail-segment-timeline");
   const activeId = state.hoveredThreatId || state.selectedThreatId;
   const prim =
     (route.threats || []).find((t) => t.threat_id === activeId) || route.primary_threat;
-  const segs = prim?.segments || [];
-  const total = route.total_distance_nmi || 0;
+  const weather = route.weather_impact || {};
+  const weatherSegs = weather.segments || [];
+  const jam = route.jam_support || {};
+  const total = route.total_distance_nmi || weather.total_distance_nmi || 0;
   const tasks = route.tasks || [];
   const cum = prim?.cumulative_nmi || [0];
   const closestPct =
-    total && cum.length
+    total && cum.length && prim
       ? (((cum[prim.closest_index] || 0) + (cum[prim.closest_index + 1] || 0)) / 2 / total) * 100
       : 0;
 
@@ -1077,28 +1092,57 @@ function renderSegmentTimeline(route) {
     })
     .join("");
 
+  const peak = weather.peak_level || "CLEAR";
+  const peakNote =
+    peak === "CLEAR"
+      ? "clear of threat weather"
+      : `peak weather ${String(peak).toLowerCase()}`;
+  const primNote = prim
+    ? ` · selected ${prim.threat_id} exposure ${String(prim.exposure || "").toLowerCase()} · frequency band ${prim.frequency_band || "—"}`
+    : "";
+
+  const impactHtml = weatherSegs.length
+    ? weatherSegs
+        .map(
+          (s) =>
+            `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="${s.from_nmi}–${s.to_nmi} nm · weather ${String(s.level || "").toLowerCase()} · intensity ${s.intensity}"></span>`,
+        )
+        .join("")
+    : `<span class="seg" style="flex:1;background:#1e293b"></span>`;
+
+  const onboardJam = jamSupportMarks(jam.onboard, total);
+  const offboardJam = jamSupportMarks(jam.offboard, total);
+
   host.innerHTML = `
     <h3>Route timeline · ${route.route_name}</h3>
-    <p class="hint">${prim ? `${prim.threat_id} closest ${prim.closest_approach_nm.toFixed(1)} nm · exposure ${String(prim.exposure || "").toLowerCase()} · frequency band ${prim.frequency_band || "—"} · ${prim.severity}` : "Clear of threat coverage"} · distance axis · only impacted sub-segments are jammed/lethal</p>
+    <p class="hint">Impact = route colour through the threat-weather cost field (${peakNote})${primNote} · distance axis</p>
     <div class="seg-tracks">
       <div class="seg-label">Impact</div>
-      <div class="seg-line">
-        ${
-          segs.length
-            ? segs
-                .map(
-                  (s) =>
-                    `<span class="seg" style="flex:${Math.max(s.length_nmi, 0.5)};background:${s.color}" title="Sub-segment ${s.index + 1} · ${s.closest_nm} nm · exposure ${String(s.exposure || "").toLowerCase()}"></span>`,
-                )
-                .join("")
-            : `<span class="seg" style="flex:1;background:#64748b"></span>`
-        }
+      <div class="seg-line weather-impact">
+        ${impactHtml}
         ${prim ? `<span class="threat-mark" style="left:${closestPct}%">▼</span>` : ""}
       </div>
       <div class="seg-label">Onboard</div>
-      <div class="task-rail"><div class="rail"></div>${taskMarks}</div>
+      <div class="task-rail jam-rail">
+        <div class="rail"></div>
+        ${taskMarks}
+        ${onboardJam || `<span class="jam-empty">No onboard jam support</span>`}
+      </div>
+      <div class="seg-label">Offboard</div>
+      <div class="task-rail jam-rail">
+        <div class="rail"></div>
+        ${offboardJam || `<span class="jam-empty">No offboard jam support</span>`}
+      </div>
       <div class="seg-label"></div>
       <div class="seg-axis"><span>0 nm</span><span>${total.toFixed(0)} nm</span></div>
+    </div>
+    <div class="weather-ramp-legend" aria-label="Weather impact colour ramp">
+      <span><i style="background:#1e293b"></i>Clear</span>
+      <span><i style="background:#2ecc71"></i>Low</span>
+      <span><i style="background:#f1c40f"></i>Medium</span>
+      <span><i style="background:#e67e22"></i>High</span>
+      <span><i style="background:#e74c3c"></i>Critical</span>
+      <span class="hint">same ramp as Plan cost field</span>
     </div>
   `;
 }

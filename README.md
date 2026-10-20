@@ -60,6 +60,9 @@ Only the route points and short sub-segments actually inside a threat's
 coverage are marked clear / jammed / lethal (the base route stays crisp);
 rings draw only for the selected or hovered threat; inset theater field;
 side panel lists threats affecting the route with their RF frequency band.
+The Impact timeline uses the same green → yellow → orange → red weather
+ramp as the Plan cost field under the route; onboard and offboard jam
+support packages are listed on their own rails with RF frequency band.
 
 ![Route details — exposure + inset field](docs/screenshots/05-route-details-map-threats.png)
 
