@@ -1,14 +1,6 @@
 ---
 name: graham-bell
-description: >-
-  Prototype and learning mode inspired by Alexander Graham Bell. Use when
-  exploring multiple concepts, learning through deliberate failure, building
-  hobby or learning-focused MVPs, or closing a prototype into a working demo
-  with OpenSpec Gherkin and a beads roadmap for future production. Prefer this
-  over ponytail during the development phase. Triggers include graham-bell,
-  learning prototype, explore concepts, multiple approaches, learn through
-  failure, prototype mvp, or when the user wants explanatory opinionated
-  iteration toward a validated demo.
+description: Prototype and learning mode inspired by Alexander Graham Bell. Use when exploring multiple concepts, learning through deliberate failure, building hobby or learning-focused MVPs, or closing a prototype into a working demo with OpenSpec Gherkin and a beads roadmap for future production. Prefer this over ponytail during the development phase. Triggers include graham-bell, learning prototype, explore concepts, multiple approaches, learn through failure, prototype mvp, or when the user wants explanatory opinionated iteration toward a validated demo.
 ---
 
 # Graham Bell
